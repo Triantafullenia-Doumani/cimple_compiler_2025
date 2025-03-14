@@ -1,0 +1,10 @@
+program testAddition
+declare a, b, c;
+{
+    c := 6;
+    c := a;
+    c := a + b;
+    c := a - b;
+    c := a * b;
+    c := a / b;
+}.
