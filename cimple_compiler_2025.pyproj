@@ -22,6 +22,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="cimple_compiler_2025.py" />
+    <Compile Include="new_compiler_lex.py" />
+    <Compile Include="new_compiler_syn.py" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="ci\" />
@@ -37,6 +39,7 @@
     <Content Include="ci\factorial.ci" />
     <Content Include="ci\fibonacci.ci" />
     <Content Include="ci\testAddition.ci" />
+    <Content Include="ci\testFunction.ci" />
     <Content Include="int\countDigits.int" />
     <Content Include="int\factorial.int" />
   </ItemGroup>

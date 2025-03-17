@@ -1,5 +1,5 @@
-﻿
-import re
+﻿import re
+
 ###################################### LEXICAL ANALYSIS #########################################
 class Token:
     def __init__(self, recognized_string, family, line_number):
@@ -135,12 +135,10 @@ class LexerFSM:
 
 ###################################### SYNTAX ANALYSIS #########################################
 class Parser:
-    def __init__(self, tokens,intermidiate):
+    def __init__(self, tokens):
         self.tokens = tokens
         self.current_token_index = 0
         self.current_token = self.tokens[self.current_token_index] if self.tokens else None
-        self.intermediate = intermidiate  
-
 
     def match(self, expected_family, expected_value=None):
         if self.current_token is None:
@@ -160,26 +158,9 @@ class Parser:
     # Grammar production: program : program ID block .
     def program(self):
         self.match("KEYWORD", "program")
-        # Get the program name from the ID token:
-        prog_name = self.current_token.recognized_string
         self.match("IDENTIFIER")
-    
-        # Process declarations and subprograms before the main block.
-        self.declarations()
-        self.subprograms()
-    
-        # Generate a quad to mark the beginning of the main block.
-        self.intermediate.genquad("begin_block", prog_name, "_", "_")
-    
-        # Parse the main block (statements).
-        self.statements()
-    
-        # Generate a halt quad and an end_block quad.
-        self.intermediate.genquad("halt", "_", "_", "_")
-        self.intermediate.genquad("end_block", prog_name, "_", "_")
-    
+        self.block()
         self.match("SYMBOL", ".")
-
 
     # block : declarations subprograms statements
     def block(self):
@@ -208,30 +189,23 @@ class Parser:
         while self.current_token and self.current_token.recognized_string in ("function", "procedure"):
             self.subprogram()
 
-
     # subprogram : function ID ( formalparlist ) block
     #            | procedure ID ( formalparlist ) block
     def subprogram(self):
         if self.current_token.recognized_string == "function":
             self.match("KEYWORD", "function")
-            func_name = self.current_token.recognized_string
             self.match("IDENTIFIER")
-            self.intermediate.genquad("begin_block", func_name, "_", "_")
             self.match("SYMBOL", "(")
             self.formalparlist()
             self.match("SYMBOL", ")")
             self.block()
-            self.intermediate.genquad("end_block", func_name, "_", "_")
         elif self.current_token.recognized_string == "procedure":
             self.match("KEYWORD", "procedure")
-            proc_name = self.current_token.recognized_string
             self.match("IDENTIFIER")
-            self.intermediate.genquad("begin_block", proc_name, "_", "_")
             self.match("SYMBOL", "(")
             self.formalparlist()
             self.match("SYMBOL", ")")
             self.block()
-            self.intermediate.genquad("end_block", proc_name, "_", "_")
         else:
             raise SyntaxError("Expected 'function' or 'procedure' in subprogram.")
 
@@ -300,17 +274,9 @@ class Parser:
 
     # assignStat : ID := expression
     def assignStat(self):
-        lhs = self.current_token.recognized_string  # e.g., "c"
         self.match("IDENTIFIER")
         self.match("OPERATOR", ":=")
-    
-        # Evaluate the expression with the target variable provided.
-        result = self.expression(target=lhs)
-    
-        # If the expression didn't directly store its result in lhs, assign it.
-        if result != lhs:
-            self.intermediate.genquad(":=", result, "_", lhs)
-
+        self.expression()
 
     # ifStat : if ( condition ) statements elsepart
     def ifStat(self):
@@ -463,62 +429,38 @@ class Parser:
                 raise SyntaxError("Expected relational operator in boolean factor.")
 
     # expression : optionalSign term ( ADD_OP term )*
-    def expression(self, target=None):
-        place = self.term(target=target)  # Forward target if possible.
-    
-        while (self.current_token and 
-               self.current_token.family == "OPERATOR" and 
-               self.current_token.recognized_string in ("+", "-")):
+    def expression(self):
+        self.optionalSign()
+        self.term()
+        while self.current_token and self.current_token.family == "OPERATOR" and self.current_token.recognized_string in ("+", "-"):
             op = self.current_token.recognized_string
             self.match("OPERATOR", op)
-            right = self.term()  # For subsequent terms, you might not pass the target.
-        
-            # Check: if this is the last operation and a target is given, use it.
-            if target is not None and not (self.current_token and 
-                                            self.current_token.family == "OPERATOR" and 
-                                            self.current_token.recognized_string in ("+", "-")):
-                self.intermediate.genquad(op, place, right, target)
-                place = target
-            else:
-                temp = self.intermediate.newtemp()
-                self.intermediate.genquad(op, place, right, temp)
-                place = temp
-    
-        return place
+            self.term()
 
-    def term(self, target=None):
-        place = self.factor()
-    
-        while (self.current_token and 
-               self.current_token.family == "OPERATOR" and 
-               self.current_token.recognized_string in ("*", "/")):
+    # term : factor ( MUL_OP factor )*
+    def term(self):
+        self.factor()
+        while self.current_token and self.current_token.family == "OPERATOR" and self.current_token.recognized_string in ("*", "/"):
             op = self.current_token.recognized_string
             self.match("OPERATOR", op)
-            right = self.factor()
-            if target is not None and not (self.current_token and 
-                                            self.current_token.family == "OPERATOR" and 
-                                            self.current_token.recognized_string in ("*", "/")):
-                self.intermediate.genquad(op, place, right, target)
-                place = target
-            else:
-                temp = self.intermediate.newtemp()
-                self.intermediate.genquad(op, place, right, temp)
-                place = temp
-        return place
+            self.factor()
 
+    # factor : INTEGER | ( expression ) | ID idtail
     def factor(self):
-        # Simplest version for identifiers and numbers.
-        if self.current_token.family in ("IDENTIFIER", "NUMBER"):
-            value = self.current_token.recognized_string
-            self.match(self.current_token.family)
-            return value
+        if self.current_token is None:
+            raise SyntaxError("Unexpected end of input in factor.")
+        if self.current_token.family == "NUMBER":
+            self.match("NUMBER")
         elif self.current_token.recognized_string == "(":
             self.match("SYMBOL", "(")
-            place = self.expression()
+            self.expression()
             self.match("SYMBOL", ")")
-            return place
+        elif self.current_token.family == "IDENTIFIER":
+            self.match("IDENTIFIER")
+            self.idtail()
         else:
-            raise SyntaxError("Unexpected token in factor")
+            raise SyntaxError(f"Unexpected token in factor: {self.current_token.recognized_string}")
+
     # idtail : ( actualparlist ) | ε
     def idtail(self):
         if self.current_token and self.current_token.recognized_string == "(":
@@ -532,73 +474,13 @@ class Parser:
             op = self.current_token.recognized_string
             self.match("OPERATOR", op)
 
-###################################### INTERMEDIATE CODE GENERATOR #########################################
-class IntermediateCodeGenerator:
-    def __init__(self):
-        # List to store quads; each quad is a tuple: (index, op, x, y, z)
-        self.quads = []
-        self.temp_count = 0
-        self.next_quad_index = 0  # Start numbering from 100 (or 1 if preferred)
-
-    def nextquad(self):
-        """Returns the next available quad index."""
-        return self.next_quad_index
-
-    def genquad(self, op, x, y, z):
-        """Creates a new quad with a unique index and appends it to the list."""
-        quad = (self.next_quad_index, op, x, y, z)
-        self.quads.append(quad)
-        self.next_quad_index += 1  # Increase AFTER adding the quad
-        return quad
-
-
-    def newtemp(self):
-        """Generates a new temporary variable in the form T_1, T_2, ..."""
-        self.temp_count += 1
-        return f"T_{self.temp_count}"
-
-    def emptylist(self):
-        """Returns an empty list used for backpatching."""
-        return []
-
-    def makelist(self, x):
-        """Creates a list with a single quad index (used for backpatching)."""
-        return [x]
-
-    def merge(self, list1, list2):
-        """Merges two lists of quad indices."""
-        return list1 + list2
-
-    def backpatch(self, lst, z):
-        """Updates the fourth field (z) of each quad in the given list."""
-        for index in lst:
-            for i, quad in enumerate(self.quads):
-                if quad[0] == index:
-                    _, op, x, y, _ = quad
-                    self.quads[i] = (index, op, x, y, z)
-                    break  # Stop searching after finding the correct quad
-
-    def print_quads(self):
-        """Prints the list of quads in a structured format."""
-        for quad in self.quads:
-            print(f"{quad[0]}: {quad[1]}, {quad[2]}, {quad[3]}, {quad[4]}")
-
-
 if __name__ == "__main__":
-    # Change "fibonacci.ci" to the path of your source file.
-    lexer = LexerFSM("ci/testFunction.ci")
-    print("Lexical analysis completed successfully.")
+    # Change "countDigits.ci" to the path of your Cimple source file.
+    lexer = LexerFSM("fibonacci.ci")
+    print("Lexixal analysis completed successfully.")
     tokens = lexer.tokenize()
-    
-    # Create an instance of the Intermediate Code Generator.
-    intermediate = IntermediateCodeGenerator()
-    
-    # Pass the intermediate instance to the Parser.
-    parser = Parser(tokens, intermediate)
+    # Uncomment the following line to see the token stream:
+    # print(tokens)
+    parser = Parser(tokens)
     parser.program()
     print("Parsing completed successfully.")
-    
-    # Print out the generated quads.
-    print("\nGenerated Intermediate Code (Quads):")
-    intermediate.print_quads()
-
