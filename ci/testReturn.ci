@@ -1,0 +1,5 @@
+program testReturn
+declare x;
+{
+return (x+1+3);
+}.

@@ -380,7 +380,8 @@ class Parser:
     def returnStat(self):
         self.match("KEYWORD", "return")
         self.match("SYMBOL", "(")
-        self.expression()
+        return_value = self.expression()
+        self.intermediate.genquad("retv", return_value, "_", "_")
         self.match("SYMBOL", ")")
 
     # callStat : call ID( actualparlist )
@@ -586,7 +587,7 @@ class IntermediateCodeGenerator:
 
 if __name__ == "__main__":
     # Change "fibonacci.ci" to the path of your source file.
-    lexer = LexerFSM("ci/testFunction.ci")
+    lexer = LexerFSM("ci/testReturn.ci")
     print("Lexical analysis completed successfully.")
     tokens = lexer.tokenize()
     

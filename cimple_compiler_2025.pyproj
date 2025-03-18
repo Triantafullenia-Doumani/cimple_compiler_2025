@@ -40,6 +40,7 @@
     <Content Include="ci\fibonacci.ci" />
     <Content Include="ci\testAddition.ci" />
     <Content Include="ci\testFunction.ci" />
+    <Content Include="ci\testReturn.ci" />
     <Content Include="int\countDigits.int" />
     <Content Include="int\factorial.int" />
   </ItemGroup>
