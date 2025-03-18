@@ -1,0 +1,7 @@
+program max
+declare a,b,c,d,e;
+{if (x>y)
+return(x);
+else
+return(y);
+}.

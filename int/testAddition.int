@@ -1,0 +1,13 @@
+1: begin_block, testAddition, _, _
+2: :=, 6, _, c
+3: :=, a, _, c
+4: +, a, b, T_1
+5: :=, T_1, _, c
+6: -, a, b, T_2
+7: :=, T_2, _, c
+8: *, a, b, T_3
+9: :=, T_3, _, c
+10: /, a, b, T_4
+11: :=, T_4, _, c
+12: halt, _, _, _
+13: end_block, testAddition, _, _

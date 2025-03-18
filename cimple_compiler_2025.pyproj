@@ -11,6 +11,7 @@
     <OutputPath>.</OutputPath>
     <Name>cimple_compiler_2025</Name>
     <RootNamespace>cimple_compiler_2025</RootNamespace>
+    <TestFramework>unittest</TestFramework>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
@@ -24,25 +25,36 @@
     <Compile Include="cimple_compiler_2025.py" />
     <Compile Include="new_compiler_lex.py" />
     <Compile Include="new_compiler_syn.py" />
+    <Compile Include="test_cimple_compiler_2025.py" />
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="ci\" />
     <Folder Include="int\" />
+    <Folder Include="tests\ci\" />
+    <Folder Include="tests\int\" />
+    <Folder Include="tests\" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="About_Cimple.pdf" />
-    <Content Include="ci\abs_value.ci" />
-    <Content Include="ci\average.ci" />
-    <Content Include="ci\calculator.ci" />
-    <Content Include="ci\countDigits.ci" />
-    <Content Include="ci\exams.ci" />
-    <Content Include="ci\factorial.ci" />
-    <Content Include="ci\fibonacci.ci" />
-    <Content Include="ci\testAddition.ci" />
-    <Content Include="ci\testFunction.ci" />
-    <Content Include="ci\testReturn.ci" />
-    <Content Include="int\countDigits.int" />
-    <Content Include="int\factorial.int" />
+    <Content Include="tests\ci\abs_value.ci" />
+    <Content Include="tests\ci\average.ci" />
+    <Content Include="tests\ci\calculator.ci" />
+    <Content Include="tests\ci\countDigits.ci" />
+    <Content Include="tests\ci\factorial.ci" />
+    <Content Include="tests\ci\fibonacci.ci" />
+    <Content Include="tests\ci\testCall.ci" />
+    <Content Include="tests\ci\testIf.ci" />
+    <Content Include="tests\ci\testAddition.ci" />
+    <Content Include="tests\ci\testFunction.ci" />
+    <Content Include="tests\ci\testOr.ci" />
+    <Content Include="tests\ci\testReturn.ci" />
+    <Content Include="tests\int\exp_average.int" />
+    <Content Include="tests\int\exp_calculator.int" />
+    <Content Include="tests\int\exp_countDigits.int" />
+    <Content Include="tests\int\exp_factorial.int" />
+    <Content Include="tests\int\exp_testIf.int" />
+    <Content Include="tests\int\exp_testAddition.int" />
+    <Content Include="tests\int\exp_testFunction.int" />
+    <Content Include="tests\int\exp_testReturn.int" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in

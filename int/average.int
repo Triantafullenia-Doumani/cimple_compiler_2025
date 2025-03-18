@@ -1,0 +1,16 @@
+1: begin_block, average, _, _
+2: inp, x, _, _
+3: :=, 0, _, sum
+4: :=, 0, _, count
+5: >, x, 1, 7
+6: jump, _, _, 12
+7: +, sum, x, T_1
+8: :=, T_1, _, sum
+9: +, count, 1, T_2
+10: :=, T_2, _, count
+11: jump, _, _, 5
+12: /, sum, count, T_3
+13: :=, T_3, _, average
+14: out, average, _, _
+15: halt, _, _, _
+16: end_block, average, _, _
