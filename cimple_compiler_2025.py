@@ -321,16 +321,33 @@ class Parser:
     # switchcaseStat : switchcase ( case ( condition ) statements )* default statements )
     def switchcaseStat(self):
         self.match("KEYWORD", "switchcase")
-        self.match("SYMBOL", "(")
+    
+        exit_list = []  # {p0} Initialize exitList as an empty list
+
+        # Case handling
         while self.current_token and self.current_token.recognized_string == "case":
             self.match("KEYWORD", "case")
-            self.match("SYMBOL", "(")
-            self.condition()
-            self.match("SYMBOL", ")")
-            self.statements()
+        
+            if self.current_token.recognized_string == "(":
+                self.match("SYMBOL", "(")
+                condition = self.condition()
+                self.match("SYMBOL", ")")
+            else:
+                condition = self.condition()
+
+            self.intermediate.backpatch(condition["true"], self.intermediate.nextquad())  # {p1}
+            self.statements()  # statements(1) {p2}
+        
+            t = self.intermediate.makelist(self.intermediate.genquad("jump", "_", "_", "_"))  # Jump after case body
+            exit_list = self.intermediate.merge(exit_list, t)  # Merge with existing exitList
+            self.intermediate.backpatch(condition["false"], self.intermediate.nextquad())  # Backpatch false condition
+
+        # Default case
         self.match("KEYWORD", "default")
-        self.statements()
-        self.match("SYMBOL", ")")
+        self.statements()  # statements(2) {p3}
+    
+        self.intermediate.backpatch(exit_list, self.intermediate.nextquad())  # {p3} Backpatch exitList to end
+
 
     # forcaseStat : forcase {p1}
     # ( case ( condition ) {p2} statements {p3} )*
@@ -369,16 +386,45 @@ class Parser:
         # Note: The exit jumps already target firstCondQuad so no further backpatching is needed.
 
     # incaseStat : incase ( case ( condition ) statements )* )
+
+
     def incaseStat(self):
+        """ Parses the 'incase' statement and generates intermediate code. """
         self.match("KEYWORD", "incase")
-        self.match("SYMBOL", "(")
+        
+        # {p1}: Initialize flag and first condition quad
+        flag = self.intermediate.newtemp()
+        firstCondQuad = self.intermediate.nextquad()
+        self.intermediate.genquad(':=', 0, '_', flag)
+        
         while self.current_token and self.current_token.recognized_string == "case":
             self.match("KEYWORD", "case")
-            self.match("SYMBOL", "(")
-            self.condition()
-            self.match("SYMBOL", ")")
+            if self.current_token.recognized_string == "(":
+                self.match("SYMBOL", "(")
+            
+            cond = self.condition()  # Evaluate condition
+            
+            if self.current_token.recognized_string == ")":
+                self.match("SYMBOL", ")")
+            
+            # {p2}: If condition is true, execute statements
+            self.intermediate.backpatch(cond["true"], self.intermediate.nextquad())
             self.statements()
-        self.match("SYMBOL", ")")
+            
+            # {p3}: Set flag to true
+            self.intermediate.genquad(':=', 1, '_', flag)
+            
+            # {p3}: Backpatch condition.false to next case/default
+            self.intermediate.backpatch(cond["false"], self.intermediate.nextquad())
+        
+        # Process default case
+        self.match("KEYWORD", "default")
+        
+        # {p4}: If flag is 1, jump back to first condition, else continue to default
+        self.intermediate.genquad('=', 1, flag, firstCondQuad)
+        self.statements()
+
+
 
     # returnStat : return( expression )
     def returnStat(self):
@@ -448,12 +494,12 @@ class Parser:
         while self.current_token and self.current_token.recognized_string == "or":
             self.match("KEYWORD", "or")
             marker = self.intermediate.nextquad()
-            self.intermediate.genquad("jump", "_", "_", "_")
-            self.intermediate.backpatch(b["false"], marker)
+            self.intermediate.backpatch(b["false"], marker)  # Backpatch previous false list before checking the next condition
             b2 = self.boolterm()
-            b["true"] = self.intermediate.merge(b["true"], b2["true"])
-            b["false"] = b2["false"]
+            b["true"] = self.intermediate.merge(b["true"], b2["true"])  # Merge all true lists
+            b["false"] = b2["false"]  # The false list should be the last evaluated boolterm's false list
         return b
+
 
     # boolterm : boolfactor ( and boolfactor )*
     def boolterm(self):
@@ -461,12 +507,12 @@ class Parser:
         while self.current_token and self.current_token.recognized_string == "and":
             self.match("KEYWORD", "and")
             marker = self.intermediate.nextquad()
-            self.intermediate.genquad("jump", "_", "_", "_")
-            self.intermediate.backpatch(b["true"], marker)
+            self.intermediate.backpatch(b["true"], marker)  # Ensure previous 'true' statements flow correctly
             b2 = self.boolfactor()
-            b["false"] = self.intermediate.merge(b["false"], b2["false"])
-            b["true"] = b2["true"]
+            b["false"] = self.intermediate.merge(b["false"], b2["false"])  # Merge false lists
+            b["true"] = b2["true"]  # Set true list to the last factor's true list
         return b
+
 
     # boolfactor : not [ condition ] | [ condition ] | expression REL_OP expression
     def boolfactor(self):
@@ -620,7 +666,7 @@ def write_int_file(intermediate, input_path):
     print(f"Intermediate code written to {output_path}")
 
 if __name__ == "__main__":
-    input_path = "tests/ci/abs_value.ci"
+    input_path = "tests/ci/testWhile_or.ci"
     lexer = LexerFSM(input_path)
     print("Lexical analysis completed successfully.")
     tokens = lexer.tokenize()

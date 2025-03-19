@@ -1,0 +1,9 @@
+program whileOr
+declare a,b;
+{
+a:=1;
+while (a<1 or b<5)
+{
+	b:=0;
+}
+}.

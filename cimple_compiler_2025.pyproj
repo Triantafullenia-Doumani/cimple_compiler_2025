@@ -39,6 +39,7 @@
     <Content Include="tests\ci\average.ci" />
     <Content Include="tests\ci\calculator.ci" />
     <Content Include="tests\ci\countDigits.ci" />
+    <Content Include="tests\ci\testWhile_and.ci" />
     <Content Include="tests\ci\factorial.ci" />
     <Content Include="tests\ci\fibonacci.ci" />
     <Content Include="tests\ci\testCall.ci" />
@@ -46,8 +47,11 @@
     <Content Include="tests\ci\testIf.ci" />
     <Content Include="tests\ci\testAddition.ci" />
     <Content Include="tests\ci\testFunction.ci" />
+    <Content Include="tests\ci\testIncase.ci" />
     <Content Include="tests\ci\testOr.ci" />
     <Content Include="tests\ci\testReturn.ci" />
+    <Content Include="tests\ci\testSwitchcase.ci" />
+    <Content Include="tests\ci\testWhile_or.ci" />
     <Content Include="tests\int\exp_abs_value.int" />
     <Content Include="tests\int\exp_average.int" />
     <Content Include="tests\int\exp_calculator.int" />
@@ -59,7 +63,11 @@
     <Content Include="tests\int\exp_testIf.int" />
     <Content Include="tests\int\exp_testAddition.int" />
     <Content Include="tests\int\exp_testFunction.int" />
+    <Content Include="tests\int\exp_testIncase.int" />
     <Content Include="tests\int\exp_testReturn.int" />
+    <Content Include="tests\int\exp_testSwitchcase.int" />
+    <Content Include="tests\int\exp_testWhile_and.int" />
+    <Content Include="tests\int\exp_testWhile_or.int" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in
