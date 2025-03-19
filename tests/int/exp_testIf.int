@@ -1,0 +1,8 @@
+1: begin_block, max, _, _
+2: >, x, y, 4
+3: jump, _, _, 6
+4: retv, x, _, _
+5: jump, _, _, 7
+6: retv, y, _, _
+7: halt, _, _, _
+8: end_block, max, _, _

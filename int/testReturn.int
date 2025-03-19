@@ -1,0 +1,6 @@
+1: begin_block, testReturn, _, _
+2: +, x, 1, T_1
+3: +, T_1, 3, T_2
+4: retv, T_2, _, _
+5: halt, _, _, _
+6: end_block, testReturn, _, _

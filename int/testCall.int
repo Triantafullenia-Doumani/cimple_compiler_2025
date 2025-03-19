@@ -1,0 +1,16 @@
+1: begin_block, testCall, _, _
+2: par, a, cv, _
+3: par, b, cv, _
+4: par, T_1, ret, _
+5: call, max, _, _
+6: par, c, cv, _
+7: par, d, cv, _
+8: par, T_2, ret, _
+9: call, max, _, _
+10: par, T_1, cv, _
+11: par, T_2, cv, _
+12: par, T_3, ret, _
+13: call, max, _, _
+14: :=, T_3, _, x
+15: halt, _, _, _
+16: end_block, testCall, _, _

@@ -1,8 +1,6 @@
 program factorial
-# declarations #
 declare x;
 declare i,fact;
-# main #
 {
 input(x);
 fact := 1;

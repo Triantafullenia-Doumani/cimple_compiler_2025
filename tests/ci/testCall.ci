@@ -1,0 +1,5 @@
+program testCall
+declare a, b, c, d, x;
+{
+x := max (in max(in a, in b), in max(in c, in d));
+}.

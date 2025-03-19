@@ -1,0 +1,17 @@
+program mainBlock
+
+	declare x,y;
+	
+	procedure procedureName(in x)
+	{
+		x:=5;
+	}
+	function functionName(in y)
+	{
+		x:=5;
+	}
+	# m a i n #
+	{
+		input(x);
+
+	}.
