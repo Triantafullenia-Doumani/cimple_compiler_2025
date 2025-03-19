@@ -1,5 +1,5 @@
 program max
-declare a,b,c,d,e;
+declare a,y;
 {if (x>y)
 return(x);
 else

@@ -1,0 +1,10 @@
+1: begin_block, whileOr, _, _
+2: :=, 1, _, a
+3: <, a, 1, 7
+4: jump, _, _, 5
+5: <, b, 5, 7
+6: jump, _, _, 9
+7: :=, 0, _, b
+8: jump, _, _, 3
+9: halt, _, _, _
+10: end_block, whileOr, _, _

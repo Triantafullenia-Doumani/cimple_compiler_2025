@@ -1,9 +1,7 @@
-program testOr
-declare x,y;
-{ 
-x:=1;
-y:=2;
-
-while (x > y ) 
+program testOr;
+declare a,y;
+{if (x>y or x>0)
 return(x);
+else
+return(y);
 }.

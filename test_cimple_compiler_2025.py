@@ -258,5 +258,173 @@ class TestCompiler(unittest.TestCase):
         with open(expected_filename, "r", encoding="utf-8") as file:
             expected_output = file.read()        
         self.assertEqual(file_content, expected_output)
+
+    def test_testForcase(self):
+            # Run the compiler on the testForcase.ci"
+            input_file = "tests/ci/testForcase.ci"
+            lexer = LexerFSM(input_file) 
+            lexer = LexerFSM(input_file)
+            tokens = lexer.tokenize()
+            intermediate = IntermediateCodeGenerator()
+            parser = Parser(tokens, intermediate)
+            parser.program()
+        
+            # Write the generated quads to the .int file in the 'int/' folder.
+            output_folder = "int"
+            os.makedirs(output_folder, exist_ok=True)
+            output_filename = os.path.join(output_folder, "testForcase.int")
+            with open(output_filename, "w", encoding="utf-8") as file:
+                for quad in intermediate.quads:
+                    file.write(f"{quad[0]}: {quad[1]}, {quad[2]}, {quad[3]}, {quad[4]}\n")
+        
+            # Read the generated file.
+            with open(output_filename, "r", encoding="utf-8") as file:
+                file_content = file.read()
+        
+            # Read the expected output from the expected file.
+            expected_filename = "tests/int/exp_testForcase.int"
+            with open(expected_filename, "r", encoding="utf-8") as file:
+                expected_output = file.read()        
+            self.assertEqual(file_content, expected_output)
+
+    def test_testAbsValue(self):
+            # Run the compiler on the abs_value.ci"
+            input_file = "tests/ci/abs_value.ci"
+            lexer = LexerFSM(input_file) 
+            lexer = LexerFSM(input_file)
+            tokens = lexer.tokenize()
+            intermediate = IntermediateCodeGenerator()
+            parser = Parser(tokens, intermediate)
+            parser.program()
+        
+            # Write the generated quads to the .int file in the 'int/' folder.
+            output_folder = "int"
+            os.makedirs(output_folder, exist_ok=True)
+            output_filename = os.path.join(output_folder, "abs_value.int")
+            with open(output_filename, "w", encoding="utf-8") as file:
+                for quad in intermediate.quads:
+                    file.write(f"{quad[0]}: {quad[1]}, {quad[2]}, {quad[3]}, {quad[4]}\n")
+        
+            # Read the generated file.
+            with open(output_filename, "r", encoding="utf-8") as file:
+                file_content = file.read()
+        
+            # Read the expected output from the expected file.
+            expected_filename = "tests/int/exp_abs_value.int"
+            with open(expected_filename, "r", encoding="utf-8") as file:
+                expected_output = file.read()        
+            self.assertEqual(file_content, expected_output)
+
+    def test_testSwitchcase(self):
+            # Run the compiler on the testSwitchcase.ci"
+            input_file = "tests/ci/testSwitchcase.ci"
+            lexer = LexerFSM(input_file) 
+            lexer = LexerFSM(input_file)
+            tokens = lexer.tokenize()
+            intermediate = IntermediateCodeGenerator()
+            parser = Parser(tokens, intermediate)
+            parser.program()
+        
+            # Write the generated quads to the .int file in the 'int/' folder.
+            output_folder = "int"
+            os.makedirs(output_folder, exist_ok=True)
+            output_filename = os.path.join(output_folder, "testSwitchcase.int")
+            with open(output_filename, "w", encoding="utf-8") as file:
+                for quad in intermediate.quads:
+                    file.write(f"{quad[0]}: {quad[1]}, {quad[2]}, {quad[3]}, {quad[4]}\n")
+        
+            # Read the generated file.
+            with open(output_filename, "r", encoding="utf-8") as file:
+                file_content = file.read()
+        
+            # Read the expected output from the expected file.
+            expected_filename = "tests/int/exp_testSwitchcase.int"
+            with open(expected_filename, "r", encoding="utf-8") as file:
+                expected_output = file.read()        
+            self.assertEqual(file_content, expected_output)
+
+    def test_testIncase(self):
+            # Run the compiler on the testIncase.ci"
+            input_file = "tests/ci/testIncase.ci"
+            lexer = LexerFSM(input_file) 
+            lexer = LexerFSM(input_file)
+            tokens = lexer.tokenize()
+            intermediate = IntermediateCodeGenerator()
+            parser = Parser(tokens, intermediate)
+            parser.program()
+        
+            # Write the generated quads to the .int file in the 'int/' folder.
+            output_folder = "int"
+            os.makedirs(output_folder, exist_ok=True)
+            output_filename = os.path.join(output_folder, "testIncase.int")
+            with open(output_filename, "w", encoding="utf-8") as file:
+                for quad in intermediate.quads:
+                    file.write(f"{quad[0]}: {quad[1]}, {quad[2]}, {quad[3]}, {quad[4]}\n")
+        
+            # Read the generated file.
+            with open(output_filename, "r", encoding="utf-8") as file:
+                file_content = file.read()
+        
+            # Read the expected output from the expected file.
+            expected_filename = "tests/int/exp_testIncase.int"
+            with open(expected_filename, "r", encoding="utf-8") as file:
+                expected_output = file.read()        
+            self.assertEqual(file_content, expected_output)
+
+    def test_testWhile_and(self):
+            # Run the compiler on the testWhile_and.ci"
+            input_file = "tests/ci/testWhile_and.ci"
+            lexer = LexerFSM(input_file) 
+            lexer = LexerFSM(input_file)
+            tokens = lexer.tokenize()
+            intermediate = IntermediateCodeGenerator()
+            parser = Parser(tokens, intermediate)
+            parser.program()
+        
+            # Write the generated quads to the .int file in the 'int/' folder.
+            output_folder = "int"
+            os.makedirs(output_folder, exist_ok=True)
+            output_filename = os.path.join(output_folder, "testWhile_and.int")
+            with open(output_filename, "w", encoding="utf-8") as file:
+                for quad in intermediate.quads:
+                    file.write(f"{quad[0]}: {quad[1]}, {quad[2]}, {quad[3]}, {quad[4]}\n")
+        
+            # Read the generated file.
+            with open(output_filename, "r", encoding="utf-8") as file:
+                file_content = file.read()
+        
+            # Read the expected output from the expected file.
+            expected_filename = "tests/int/exp_testWhile_and.int"
+            with open(expected_filename, "r", encoding="utf-8") as file:
+                expected_output = file.read()        
+            self.assertEqual(file_content, expected_output)
+
+    def test_testWhile_or(self):
+            # Run the compiler on the testWhile_or.ci"
+            input_file = "tests/ci/testWhile_or.ci"
+            lexer = LexerFSM(input_file) 
+            lexer = LexerFSM(input_file)
+            tokens = lexer.tokenize()
+            intermediate = IntermediateCodeGenerator()
+            parser = Parser(tokens, intermediate)
+            parser.program()
+        
+            # Write the generated quads to the .int file in the 'int/' folder.
+            output_folder = "int"
+            os.makedirs(output_folder, exist_ok=True)
+            output_filename = os.path.join(output_folder, "testWhile_or.int")
+            with open(output_filename, "w", encoding="utf-8") as file:
+                for quad in intermediate.quads:
+                    file.write(f"{quad[0]}: {quad[1]}, {quad[2]}, {quad[3]}, {quad[4]}\n")
+        
+            # Read the generated file.
+            with open(output_filename, "r", encoding="utf-8") as file:
+                file_content = file.read()
+        
+            # Read the expected output from the expected file.
+            expected_filename = "tests/int/exp_testWhile_or.int"
+            with open(expected_filename, "r", encoding="utf-8") as file:
+                expected_output = file.read()        
+            self.assertEqual(file_content, expected_output)
 if __name__ == "__main__":
     unittest.main()

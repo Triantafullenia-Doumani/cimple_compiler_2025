@@ -1,0 +1,13 @@
+1: begin_block, testForcase, _, _
+2: >, a, 0, 4
+3: jump, _, _, 7
+4: -, a, 1, T_1
+5: :=, T_1, _, a
+6: jump, _, _, 2
+7: <, a, 0, 9
+8: jump, _, _, 12
+9: +, a, 1, T_2
+10: :=, T_2, _, a
+11: jump, _, _, 2
+12: halt, _, _, _
+13: end_block, testForcase, _, _
