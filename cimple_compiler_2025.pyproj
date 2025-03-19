@@ -51,6 +51,8 @@
     <Content Include="tests\int\exp_calculator.int" />
     <Content Include="tests\int\exp_countDigits.int" />
     <Content Include="tests\int\exp_factorial.int" />
+    <Content Include="tests\int\exp_fibonacci.int" />
+    <Content Include="tests\int\exp_testCall.int" />
     <Content Include="tests\int\exp_testIf.int" />
     <Content Include="tests\int\exp_testAddition.int" />
     <Content Include="tests\int\exp_testFunction.int" />

@@ -136,18 +136,16 @@ class LexerFSM:
 
 ###################################### SYNTAX ANALYSIS #########################################
 class Parser:
-    def __init__(self, tokens, intermidiate):
+    def __init__(self, tokens, intermediate):
         self.tokens = tokens
         self.current_token_index = 0
         self.current_token = self.tokens[self.current_token_index] if self.tokens else None
-        self.intermediate = intermidiate  
+        self.intermediate = intermediate  
 
     def match(self, expected_family, expected_value=None):
         if self.current_token is None:
             raise SyntaxError("Unexpected end of input.")
         if self.current_token.family == expected_family and (expected_value is None or self.current_token.recognized_string == expected_value):
-            # Uncomment the next line for debugging token consumption:
-            # print("Matched:", self.current_token)
             self.current_token_index += 1
             if self.current_token_index < len(self.tokens):
                 self.current_token = self.tokens[self.current_token_index]
@@ -160,24 +158,14 @@ class Parser:
     # Grammar production: program : program ID block .
     def program(self):
         self.match("KEYWORD", "program")
-        # Get the program name from the ID token:
         prog_name = self.current_token.recognized_string
         self.match("IDENTIFIER")
-    
-        # Process declarations and subprograms before the main block.
         self.declarations()
         self.subprograms()
-    
-        # Generate a quad to mark the beginning of the main block.
         self.intermediate.genquad("begin_block", prog_name, "_", "_")
-    
-        # Parse the main block (statements).
         self.statements()
-    
-        # Generate a halt quad and an end_block quad.
         self.intermediate.genquad("halt", "_", "_", "_")
         self.intermediate.genquad("end_block", prog_name, "_", "_")
-    
         self.match("SYMBOL", ".")
 
     # block : declarations subprograms statements
@@ -200,7 +188,6 @@ class Parser:
             while self.current_token and self.current_token.recognized_string == ",":
                 self.match("SYMBOL", ",")
                 self.match("IDENTIFIER")
-        # Else: ε
 
     # subprograms : ( subprogram )*
     def subprograms(self):
@@ -240,7 +227,6 @@ class Parser:
             while self.current_token and self.current_token.recognized_string == ",":
                 self.match("SYMBOL", ",")
                 self.formalparitem()
-        # Else: ε
 
     # formalparitem : in ID | inout ID
     def formalparitem(self):
@@ -253,8 +239,7 @@ class Parser:
         else:
             raise SyntaxError("Expected formal parameter starting with 'in' or 'inout'.")
 
-    # statements : statement ; 
-    #            | { statement ( ; statement )* }
+    # statements : statement ; | { statement ( ; statement )* }
     def statements(self):
         if self.current_token and self.current_token.recognized_string == "{":
             self.match("SYMBOL", "{")
@@ -270,9 +255,8 @@ class Parser:
     # statement : one of several alternatives (or ε)
     def statement(self):
         if self.current_token is None:
-            return  # ε production
+            return
         if self.current_token.family == "IDENTIFIER":
-            # Assume assignStat if followed by ':='.
             self.assignStat()
         elif self.current_token.recognized_string == "if":
             self.ifStat()
@@ -293,84 +277,48 @@ class Parser:
         elif self.current_token.recognized_string == "print":
             self.printStat()
         else:
-            # Allow an empty statement (ε)
             pass
 
     # assignStat : ID := expression
     def assignStat(self):
-        # Get the LHS identifier.
         lhs = self.current_token.recognized_string
         self.match("IDENTIFIER")
         self.match("OPERATOR", ":=")
-    
-        # Do NOT forward the target; let expression() generate temporaries as needed.
-        result = self.expression()  
-        # If the result is not the same as lhs, generate an assignment quad.
+        result = self.expression()
+        # The assignment quad is generated after the entire expression (including any call quads)
+        # has been processed—so the ":=" quad comes after the "call" quad.
         if result != lhs:
             self.intermediate.genquad(":=", result, "_", lhs)
 
     # ifStat : if ( condition ) statements elsepart
     def ifStat(self):
-        # if ( condition ) {p1} statements(1) {p2} elsePart
         self.match("KEYWORD", "if")
         self.match("SYMBOL", "(")
-        # Evaluate condition; condition() returns a dictionary with "true" and "false" lists.
-        b = self.condition()  
+        b = self.condition()
         self.match("SYMBOL", ")")
-        
-        # {p1}: Backpatch true list to the start of the then-part.
         self.intermediate.backpatch(b["true"], self.intermediate.nextquad())
-        
-        # Process then-part statements (e.g., return(x);)
         self.statements()
-        
-        # Generate an unconditional jump to skip the else-part.
         jump_after_then = self.intermediate.genquad("jump", "_", "_", "_")
-        
-        # {p2}: Backpatch false list to the start of the else-part.
         self.intermediate.backpatch(b["false"], self.intermediate.nextquad())
-        
-        # Process else-part if it exists.
         if self.current_token and self.current_token.recognized_string == "else":
             self.match("KEYWORD", "else")
             self.statements()
-        
-        # Backpatch the jump so that it jumps to the code following the if-statement.
         self.intermediate.backpatch([jump_after_then], self.intermediate.nextquad())
-
-    # elsepart : else statements | ε
-    def elsepart(self):
-        if self.current_token and self.current_token.recognized_string == "else":
-            self.match("KEYWORD", "else")
-            self.statements()
-        # Else: ε
 
     # whileStat : while ( condition ) statements
     def whileStat(self):
-        # Mark the beginning of the condition evaluation (M)
         M = self.intermediate.nextquad()
         self.match("KEYWORD", "while")
         self.match("SYMBOL", "(")
-        # Evaluate the condition; this returns a dictionary with lists "true" and "false"
         b = self.condition()
         self.match("SYMBOL", ")")
-        
-        # Mark the beginning of the loop body (S)
         S = self.intermediate.nextquad()
-        # Backpatch the true list of the condition to jump to the beginning of the loop body.
         self.intermediate.backpatch(b["true"], S)
-        
-        # Translate the statements in the loop body.
         self.statements()
-        
-        # Generate an unconditional jump back to the beginning of the condition (M)
         self.intermediate.genquad("jump", "_", "_", M)
-        
-        # Let F be the quad number immediately after the loop body.
         F = self.intermediate.nextquad()
-        # Backpatch the false list of the condition to F.
         self.intermediate.backpatch(b["false"], F)
-    
+
     # switchcaseStat : switchcase ( case ( condition ) statements )* default statements )
     def switchcaseStat(self):
         self.match("KEYWORD", "switchcase")
@@ -422,13 +370,14 @@ class Parser:
     # callStat : call ID( actualparlist )
     def callStat(self):
         self.match("KEYWORD", "call")
-        # Capture the procedure name for the call.
         proc_name = self.current_token.recognized_string
         self.match("IDENTIFIER")
         self.match("SYMBOL", "(")
-        self.actualparlist()
+        params = self.actualparlist()  # Returns a list of (mode, value)
         self.match("SYMBOL", ")")
-        # Generate the call quad after all parameters have been processed.
+        for param in params:
+            mode = "cv" if param[0] == "in" else "ref"
+            self.intermediate.genquad("par", param[1], mode, "_")
         self.intermediate.genquad("call", proc_name, "_", "_")
 
     # printStat : print( expression )
@@ -450,38 +399,35 @@ class Parser:
 
     # actualparlist : actualparitem ( , actualparitem )* | ε
     def actualparlist(self):
+        params = []
         if self.current_token and self.current_token.recognized_string != ")":
-            self.actualparitem()
+            params.append(self.actualparitem())
             while self.current_token and self.current_token.recognized_string == ",":
                 self.match("SYMBOL", ",")
-                self.actualparitem()
+                params.append(self.actualparitem())
+        return params
 
     # actualparitem : in expression | inout ID
     def actualparitem(self):
         if self.current_token.recognized_string == "in":
             self.match("KEYWORD", "in")
-            # Evaluate the expression for the 'in' parameter.
             value = self.expression()
-            # Generate a 'par' quad with mode "cv" (copy value).
-            self.intermediate.genquad("par", value, "cv", "_")
+            return ("in", value)
         elif self.current_token.recognized_string == "inout":
             self.match("KEYWORD", "inout")
-            # For an 'inout' parameter, the token must be an identifier.
             identifier = self.current_token.recognized_string
             self.match("IDENTIFIER")
-            # Generate a 'par' quad with mode "ref" (reference).
-            self.intermediate.genquad("par", identifier, "ref", "_")
+            return ("inout", identifier)
         else:
             raise SyntaxError("Expected actual parameter starting with 'in' or 'inout'.")
 
     # condition : boolterm ( or boolterm )*
     def condition(self):
-        b = self.boolterm()  # Assume boolterm() calls boolfactor() and returns a dict
+        b = self.boolterm()
         while self.current_token and self.current_token.recognized_string == "or":
             self.match("KEYWORD", "or")
             marker = self.intermediate.nextquad()
-            self.intermediate.genquad("jump", "_", "_", "_")  # Unconditional jump for the left part
-            # Backpatch the false list of b to jump to the next condition evaluation.
+            self.intermediate.genquad("jump", "_", "_", "_")
             self.intermediate.backpatch(b["false"], marker)
             b2 = self.boolterm()
             b["true"] = self.intermediate.merge(b["true"], b2["true"])
@@ -515,7 +461,6 @@ class Parser:
             self.match("SYMBOL", "]")
             return b
         else:
-            # Translate a relational expression: e.g. i <= x
             left = self.expression()
             if (self.current_token and self.current_token.family == "OPERATOR" and
                 self.current_token.recognized_string in ("=", "<=", ">=", ">", "<", "<>")):
@@ -524,16 +469,13 @@ class Parser:
             else:
                 raise SyntaxError("Expected relational operator in boolean factor.")
             right = self.expression()
-            # Generate the conditional quad; its target (z) is initially a placeholder "_"
             q_true = self.intermediate.genquad(op, left, right, "_")
             true_list = self.intermediate.makelist(q_true)
-            # Immediately generate an unconditional jump quad for the false branch
             q_false = self.intermediate.genquad("jump", "_", "_", "_")
             false_list = self.intermediate.makelist(q_false)
             return {"true": true_list, "false": false_list}
 
     def expression(self):
-        # Evaluate a term; do not pass a target so that new temporaries are used.
         place = self.term()
         while (self.current_token and 
                self.current_token.family == "OPERATOR" and 
@@ -541,14 +483,12 @@ class Parser:
             op = self.current_token.recognized_string
             self.match("OPERATOR", op)
             right = self.term()
-            # Always generate a new temporary for a binary operator.
             temp = self.intermediate.newtemp()
             self.intermediate.genquad(op, place, right, temp)
             place = temp
         return place
 
     def term(self):
-        # Evaluate a factor.
         place = self.factor()
         while (self.current_token and 
                self.current_token.family == "OPERATOR" and 
@@ -563,17 +503,19 @@ class Parser:
 
     def factor(self):
         if self.current_token.family == "IDENTIFIER":
-            # Save the identifier name.
             ident = self.current_token.recognized_string
             self.match("IDENTIFIER")
-            # Check for a function call (i.e. an identifier followed by '(').
+            # Check for a function call (identifier followed by "(")
             if self.current_token and self.current_token.recognized_string == "(":
                 self.match("SYMBOL", "(")
-                self.actualparlist()  # Process the argument list (if any)
+                params = self.actualparlist()  # Collect list of (mode, value)
                 self.match("SYMBOL", ")")
-                # Generate a temporary to hold the function's return value.
+                for param in params:
+                    mode = "cv" if param[0] == "in" else "ref"
+                    self.intermediate.genquad("par", param[1], mode, "_")
                 temp = self.intermediate.newtemp()
-                self.intermediate.genquad("call", ident, "_", temp)
+                self.intermediate.genquad("par", temp, "ret", "_")
+                self.intermediate.genquad("call", ident, "_", "_")
                 return temp
             else:
                 return ident
@@ -589,8 +531,6 @@ class Parser:
         else:
             raise SyntaxError("Unexpected token in factor")
 
-
-    # optionalSign : ADD_OP | ε
     def optionalSign(self):
         if self.current_token and self.current_token.family == "OPERATOR" and self.current_token.recognized_string in ("+", "-"):
             op = self.current_token.recognized_string
@@ -601,86 +541,60 @@ class IntermediateCodeGenerator:
     def __init__(self):
         self.quads = []
         self.temp_count = 0
-        self.next_quad_index = 1  # Starting quad numbering from 1
+        self.next_quad_index = 1  # Start numbering quads from 1
 
     def nextquad(self):
         return self.next_quad_index
 
     def genquad(self, op, x, y, z):
-        # Create a new quad, store it, and update the index.
         quad = (self.next_quad_index, op, x, y, z)
         self.quads.append(quad)
         self.next_quad_index += 1
-        return quad[0]  # Return the index of the new quad
+        return quad[0]
 
     def newtemp(self):
         self.temp_count += 1
         return f"T_{self.temp_count}"
 
     def makelist(self, index):
-        # Returns a list containing one quad index.
         return [index]
 
     def merge(self, list1, list2):
         return list1 + list2
 
     def backpatch(self, lst, z):
-        # For every quad index in lst, update its target field (the fourth field) to z.
         for index in lst:
-            # Find the quad with the given index and update its z-field.
             for i, quad in enumerate(self.quads):
                 if quad[0] == index:
-                    # Rebuild the quad with z updated.
                     self.quads[i] = (quad[0], quad[1], quad[2], quad[3], z)
                     break
 
     def print_quads(self):
-        """Prints the list of quads in a structured format."""
         for quad in self.quads:
             print(f"{quad[0]}: {quad[1]}, {quad[2]}, {quad[3]}, {quad[4]}")
 
 ###################################### WRITE INTERMEDIATE CODE TO FILE #########################################
 def write_int_file(intermediate, input_path):
-    """
-    Creates an output file with the intermediate quads inside the 'int/' folder.
-    For example, if input_path is 'a.ci', then the output file will be 'int/a.int'.
-    """
-    # Extract the base name (e.g., a.ci) and remove its extension.
     base_name = os.path.basename(input_path)
     name_without_ext = os.path.splitext(base_name)[0]
     output_filename = f"{name_without_ext}.int"
-    
-    # Create the 'int' folder if it doesn't exist.
     output_folder = "int"
     os.makedirs(output_folder, exist_ok=True)
-    
     output_path = os.path.join(output_folder, output_filename)
-    
     with open(output_path, "w", encoding="utf-8") as f:
         for quad in intermediate.quads:
             f.write(f"{quad[0]}: {quad[1]}, {quad[2]}, {quad[3]}, {quad[4]}\n")
-    
     print(f"Intermediate code written to {output_path}")
 
 if __name__ == "__main__":
-    # Set the input file path (e.g., "ci/factorial.ci" or "ci/example.ci")
-    input_path = "tests/ci/testCall.ci"  
+    input_path = "tests/ci/fibonacci.ci"
     lexer = LexerFSM(input_path)
     print("Lexical analysis completed successfully.")
     tokens = lexer.tokenize()
-    
-    # Create an instance of the Intermediate Code Generator.
     intermediate = IntermediateCodeGenerator()
-    
-    # Pass the intermediate instance to the Parser.
     parser = Parser(tokens, intermediate)
     parser.program()
     print("Parsing completed successfully.")
-    
-    # Print out the generated quads.
     print("\nGenerated Intermediate Code (Quads):")
     intermediate.print_quads()
-    
-    # Write the intermediate code to an .int file in the 'int/' folder.
     write_int_file(intermediate, input_path)
-

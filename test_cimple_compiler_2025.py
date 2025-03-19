@@ -202,5 +202,61 @@ class TestCompiler(unittest.TestCase):
             expected_output = file.read()        
         self.assertEqual(file_content, expected_output)
 
+    def test_fibonacci(self):
+        # Run the compiler on the fibonacci.ci"
+        input_file = "tests/ci/fibonacci.ci"
+        lexer = LexerFSM(input_file) 
+        lexer = LexerFSM(input_file)
+        tokens = lexer.tokenize()
+        intermediate = IntermediateCodeGenerator()
+        parser = Parser(tokens, intermediate)
+        parser.program()
+        
+        # Write the generated quads to the .int file in the 'int/' folder.
+        output_folder = "int"
+        os.makedirs(output_folder, exist_ok=True)
+        output_filename = os.path.join(output_folder, "fibonacci.int")
+        with open(output_filename, "w", encoding="utf-8") as file:
+            for quad in intermediate.quads:
+                file.write(f"{quad[0]}: {quad[1]}, {quad[2]}, {quad[3]}, {quad[4]}\n")
+        
+        # Read the generated file.
+        with open(output_filename, "r", encoding="utf-8") as file:
+            file_content = file.read()
+        
+        # Read the expected output from the expected file.
+        expected_filename = "tests/int/exp_fibonacci.int"
+        with open(expected_filename, "r", encoding="utf-8") as file:
+            expected_output = file.read()        
+        self.assertEqual(file_content, expected_output)
+
+
+    def test_testCall(self):
+        # Run the compiler on the testCall.ci"
+        input_file = "tests/ci/testCall.ci"
+        lexer = LexerFSM(input_file) 
+        lexer = LexerFSM(input_file)
+        tokens = lexer.tokenize()
+        intermediate = IntermediateCodeGenerator()
+        parser = Parser(tokens, intermediate)
+        parser.program()
+        
+        # Write the generated quads to the .int file in the 'int/' folder.
+        output_folder = "int"
+        os.makedirs(output_folder, exist_ok=True)
+        output_filename = os.path.join(output_folder, "testCall.int")
+        with open(output_filename, "w", encoding="utf-8") as file:
+            for quad in intermediate.quads:
+                file.write(f"{quad[0]}: {quad[1]}, {quad[2]}, {quad[3]}, {quad[4]}\n")
+        
+        # Read the generated file.
+        with open(output_filename, "r", encoding="utf-8") as file:
+            file_content = file.read()
+        
+        # Read the expected output from the expected file.
+        expected_filename = "tests/int/exp_testCall.int"
+        with open(expected_filename, "r", encoding="utf-8") as file:
+            expected_output = file.read()        
+        self.assertEqual(file_content, expected_output)
 if __name__ == "__main__":
     unittest.main()
