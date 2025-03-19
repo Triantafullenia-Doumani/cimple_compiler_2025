@@ -63,6 +63,7 @@ class LexerFSM:
                     i += 1
                     continue
                 if any(char == op[0] for op in self.OPERATORS):
+                    state = self.OPERATORS and self.OPERATORS  # just to trigger operator state
                     state = self.OPERATOR
                     lexeme = char
                     i += 1
@@ -285,8 +286,6 @@ class Parser:
         self.match("IDENTIFIER")
         self.match("OPERATOR", ":=")
         result = self.expression()
-        # The assignment quad is generated after the entire expression (including any call quads)
-        # has been processed—so the ":=" quad comes after the "call" quad.
         if result != lhs:
             self.intermediate.genquad(":=", result, "_", lhs)
 
@@ -333,19 +332,41 @@ class Parser:
         self.statements()
         self.match("SYMBOL", ")")
 
-    # forcaseStat : forcase ( case ( condition ) statements )* default statements )
+    # forcaseStat : forcase {p1}
+    # ( case ( condition ) {p2} statements {p3} )*
+    # default statements
     def forcaseStat(self):
         self.match("KEYWORD", "forcase")
-        self.match("SYMBOL", "(")
+        # {p1} Marker: record the starting quad for all case conditions.
+        firstCondQuad = self.intermediate.nextquad()
+        exit_jumps = []   # Will hold jump quads from each case's statements.
+        prev_false_list = None  # To hold the false list from the previous case.
+        
+        # Process one or more case clauses.
         while self.current_token and self.current_token.recognized_string == "case":
+            # Record the starting quad for this case's condition evaluation.
+            current_cond_quad = self.intermediate.nextquad()
             self.match("KEYWORD", "case")
             self.match("SYMBOL", "(")
-            self.condition()
+            cond = self.condition()  # cond is a dict with "true" and "false" lists.
             self.match("SYMBOL", ")")
+            # If a previous case exists, backpatch its false list to this case's condition.
+            if prev_false_list is not None:
+                self.intermediate.backpatch(prev_false_list, current_cond_quad)
+            # {p2} Backpatch the true list to the beginning of this case's statements.
+            self.intermediate.backpatch(cond["true"], self.intermediate.nextquad())
             self.statements()
+            # {p3} Generate a jump that returns to the beginning of the forcase.
+            exit_jumps.append(self.intermediate.genquad("jump", "_", "_", firstCondQuad))
+            # Save the false list of the current condition to be backpatched by the next case or default.
+            prev_false_list = cond["false"]
+        
+        # Process the default clause.
         self.match("KEYWORD", "default")
+        # Backpatch the false list from the last case to the start of the default statements.
+        self.intermediate.backpatch(prev_false_list, self.intermediate.nextquad())
         self.statements()
-        self.match("SYMBOL", ")")
+        # Note: The exit jumps already target firstCondQuad so no further backpatching is needed.
 
     # incaseStat : incase ( case ( condition ) statements )* )
     def incaseStat(self):
@@ -502,6 +523,12 @@ class Parser:
         return place
 
     def factor(self):
+        # Handle an optional unary sign
+        unary = None
+        if self.current_token and self.current_token.family == "OPERATOR" and self.current_token.recognized_string in ("+", "-"):
+            unary = self.current_token.recognized_string
+            self.match("OPERATOR", unary)
+
         if self.current_token.family == "IDENTIFIER":
             ident = self.current_token.recognized_string
             self.match("IDENTIFIER")
@@ -516,20 +543,26 @@ class Parser:
                 temp = self.intermediate.newtemp()
                 self.intermediate.genquad("par", temp, "ret", "_")
                 self.intermediate.genquad("call", ident, "_", "_")
-                return temp
+                result = temp
             else:
-                return ident
+                result = ident
         elif self.current_token.family == "NUMBER":
             value = self.current_token.recognized_string
             self.match("NUMBER")
-            return value
+            result = value
         elif self.current_token.recognized_string == "(":
             self.match("SYMBOL", "(")
-            place = self.expression()
+            result = self.expression()
             self.match("SYMBOL", ")")
-            return place
         else:
             raise SyntaxError("Unexpected token in factor")
+        
+        if unary == "-":
+            temp = self.intermediate.newtemp()
+            self.intermediate.genquad("*", result, "-1", temp)
+            result = temp
+        
+        return result
 
     def optionalSign(self):
         if self.current_token and self.current_token.family == "OPERATOR" and self.current_token.recognized_string in ("+", "-"):
@@ -587,7 +620,7 @@ def write_int_file(intermediate, input_path):
     print(f"Intermediate code written to {output_path}")
 
 if __name__ == "__main__":
-    input_path = "tests/ci/fibonacci.ci"
+    input_path = "tests/ci/abs_value.ci"
     lexer = LexerFSM(input_path)
     print("Lexical analysis completed successfully.")
     tokens = lexer.tokenize()
