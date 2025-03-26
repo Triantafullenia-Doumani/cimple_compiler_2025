@@ -12,7 +12,6 @@ class Variable(Entity):
         self.datatype = datatype
         self.offset = offset
 
-# Temporary variables are similar to variables.
 class TemporaryVariable(Variable):
     def __init__(self, name, datatype="int", offset=0):
         super().__init__(name, datatype, offset)
@@ -43,7 +42,7 @@ class SymbolTable:
         parent = self.scopes[-1] if self.scopes else None
         new_scope = Scope(parent)
         self.scopes.append(new_scope)
-        print("new scope added")
+        #print("new scope added")
 
     def close_scope(self):
         return self.scopes.pop()
@@ -199,12 +198,10 @@ class Parser:
         self.current_token = self.tokens[self.current_token_index] if self.tokens else None
         self.intermediate = intermediate  
         self.symbol_table = SymbolTable()
-        # Open the global (outermost) scope.
         self.symbol_table.open_scope()
 
-    # Helper: Create and declare a temporary variable.
     def new_temp(self):
-        temp_name = self.intermediate.newtemp()  # e.g., T_1, T_2, etc.
+        temp_name = self.intermediate.newtemp()
         offset = self.symbol_table.allocate_offset()
         self.symbol_table.declare(TemporaryVariable(temp_name, "int", offset))
         return temp_name
@@ -222,7 +219,6 @@ class Parser:
             exp = expected_value if expected_value is not None else expected_family
             raise SyntaxError(f"Syntax error at line {self.current_token.line_number}: Expected '{exp}', found '{self.current_token.recognized_string}'.")
 
-    # program : program ID block .
     def program(self):
         self.match("KEYWORD", "program")
         prog_name = self.current_token.recognized_string
@@ -234,23 +230,19 @@ class Parser:
         self.intermediate.genquad("halt", "_", "_", "_")
         self.intermediate.genquad("end_block", prog_name, "_", "_")
         self.match("SYMBOL", ".")
-        # Print the symbol table; should include global variables and any temporaries.
         self.symbol_table.print_table()
 
-    # block : declarations subprograms statements
     def block(self):
         self.declarations()
         self.subprograms()
         self.statements()
 
-    # declarations : ( declare varlist ; )*
     def declarations(self):
         while self.current_token and self.current_token.recognized_string == "declare":
             self.match("KEYWORD", "declare")
             self.varlist()
             self.match("SYMBOL", ";")
 
-    # varlist : ID ( , ID )*
     def varlist(self):
         if self.current_token and self.current_token.family == "IDENTIFIER":
             var_name = self.current_token.recognized_string
@@ -264,12 +256,10 @@ class Parser:
                 offset = self.symbol_table.allocate_offset()
                 self.symbol_table.declare(Variable(var_name, "int", offset))
 
-    # subprograms : ( subprogram )*
     def subprograms(self):
         while self.current_token and self.current_token.recognized_string in ("function", "procedure"):
             self.subprogram()
 
-    # subprogram : function ID ( formalparlist ) block | procedure ID ( formalparlist ) block
     def subprogram(self):
         if self.current_token.recognized_string == "function":
             self.match("KEYWORD", "function")
@@ -279,7 +269,7 @@ class Parser:
             self.match("SYMBOL", "(")
             self.formalparlist()
             self.match("SYMBOL", ")")
-            self.symbol_table.open_scope()  # Open new scope for function body.
+            self.symbol_table.open_scope()
             self.block()
             self.intermediate.genquad("end_block", func_name, "_", "_")
             self.symbol_table.close_scope()
@@ -291,14 +281,13 @@ class Parser:
             self.match("SYMBOL", "(")
             self.formalparlist()
             self.match("SYMBOL", ")")
-            self.symbol_table.open_scope()  # Open new scope for procedure body.
+            self.symbol_table.open_scope()
             self.block()
             self.intermediate.genquad("end_block", proc_name, "_", "_")
             self.symbol_table.close_scope()
         else:
             raise SyntaxError("Expected 'function' or 'procedure' in subprogram.")
 
-    # formalparlist : formalparitem ( , formalparitem )* | ε
     def formalparlist(self):
         if self.current_token and self.current_token.recognized_string in ("in", "inout"):
             self.formalparitem()
@@ -306,7 +295,6 @@ class Parser:
                 self.match("SYMBOL", ",")
                 self.formalparitem()
 
-    # formalparitem : in ID | inout ID
     def formalparitem(self):
         if self.current_token.recognized_string == "in":
             self.match("KEYWORD", "in")
@@ -317,7 +305,6 @@ class Parser:
         else:
             raise SyntaxError("Expected formal parameter starting with 'in' or 'inout'.")
 
-    # statements : statement ; | { statement ( ; statement )* }
     def statements(self):
         if self.current_token and self.current_token.recognized_string == "{":
             self.match("SYMBOL", "{")
@@ -356,7 +343,6 @@ class Parser:
         else:
             pass
 
-    # assignStat : ID := expression
     def assignStat(self):
         lhs = self.current_token.recognized_string
         self.match("IDENTIFIER")
@@ -365,7 +351,6 @@ class Parser:
         if result != lhs:
             self.intermediate.genquad(":=", result, "_", lhs)
 
-    # returnStat : return( expression )
     def returnStat(self):
         self.match("KEYWORD", "return")
         self.match("SYMBOL", "(")
@@ -373,7 +358,6 @@ class Parser:
         self.intermediate.genquad("retv", ret_val, "_", "_")
         self.match("SYMBOL", ")")
 
-    # printStat : print( expression )
     def printStat(self):
         self.match("KEYWORD", "print")
         self.match("SYMBOL", "(")
@@ -381,7 +365,6 @@ class Parser:
         self.intermediate.genquad("out", print_value, "_", "_")
         self.match("SYMBOL", ")")
 
-    # inputStat : input( ID )
     def inputStat(self):
         self.match("KEYWORD", "input")
         self.match("SYMBOL", "(")
@@ -390,17 +373,37 @@ class Parser:
         self.intermediate.genquad("inp", input_var, "_", "_")
         self.match("SYMBOL", ")")
 
-    # callStat : call ID( actualparlist )
     def callStat(self):
         self.match("KEYWORD", "call")
         func_name = self.current_token.recognized_string
         self.match("IDENTIFIER")
         self.match("SYMBOL", "(")
-        self.actualparlist()  # Parameters will be handled by generated 'par' quads.
+        self.actualparlist()  # Actual parameters are generated by factor() for function calls.
         self.match("SYMBOL", ")")
         self.intermediate.genquad("call", func_name, "_", "_")
 
-    # ifStat : if ( condition ) statements elsepart
+    def actualparitem(self):
+        if self.current_token.recognized_string == "in":
+            self.match("KEYWORD", "in")
+            value = self.expression()
+            return ("in", value)
+        elif self.current_token.recognized_string == "inout":
+            self.match("KEYWORD", "inout")
+            identifier = self.current_token.recognized_string
+            self.match("IDENTIFIER")
+            return ("inout", identifier)
+        else:
+            raise SyntaxError("Expected actual parameter starting with 'in' or 'inout'.")
+
+    def actualparlist(self):
+        params = []
+        if self.current_token and self.current_token.recognized_string != ")":
+            params.append(self.actualparitem())
+            while self.current_token and self.current_token.recognized_string == ",":
+                self.match("SYMBOL", ",")
+                params.append(self.actualparitem())
+        return params
+
     def ifStat(self):
         self.match("KEYWORD", "if")
         self.match("SYMBOL", "(")
@@ -415,7 +418,6 @@ class Parser:
             self.statements()
         self.intermediate.backpatch([jump_after_then], self.intermediate.nextquad())
 
-    # whileStat : while ( condition ) statements
     def whileStat(self):
         M = self.intermediate.nextquad()
         self.match("KEYWORD", "while")
@@ -431,7 +433,7 @@ class Parser:
 
     def switchcaseStat(self):
         self.match("KEYWORD", "switchcase")
-        exit_list = []  # Initialize exit list.
+        exit_list = []
         while self.current_token and self.current_token.recognized_string == "case":
             self.match("KEYWORD", "case")
             if self.current_token.recognized_string == "(":
@@ -451,7 +453,7 @@ class Parser:
 
     def forcaseStat(self):
         self.match("KEYWORD", "forcase")
-        firstCondQuad = self.intermediate.nextquad()  # Marker for case conditions.
+        firstCondQuad = self.intermediate.nextquad()
         exit_jumps = []
         prev_false_list = None
         while self.current_token and self.current_token.recognized_string == "case":
@@ -491,29 +493,32 @@ class Parser:
         self.intermediate.genquad("=", 1, flag, firstCondQuad)
         self.statements()
 
-    def actualparlist(self):
-        params = []
-        if self.current_token and self.current_token.recognized_string != ")":
-            params.append(self.actualparitem())
-            while self.current_token and self.current_token.recognized_string == ",":
-                self.match("SYMBOL", ",")
-                params.append(self.actualparitem())
-        return params
-
-    def actualparitem(self):
-        if self.current_token.recognized_string == "in":
-            self.match("KEYWORD", "in")
-            value = self.expression()
-            self.intermediate.genquad("par", value, "cv", "_")
-            return ("in", value)
-        elif self.current_token.recognized_string == "inout":
-            self.match("KEYWORD", "inout")
-            identifier = self.current_token.recognized_string
-            self.match("IDENTIFIER")
-            self.intermediate.genquad("par", identifier, "ref", "_")
-            return ("inout", identifier)
+    def boolfactor(self):
+        if self.current_token and self.current_token.recognized_string == "not":
+            self.match("KEYWORD", "not")
+            self.match("SYMBOL", "[")
+            b = self.condition()
+            self.match("SYMBOL", "]")
+            return {"true": b["false"], "false": b["true"]}
+        elif self.current_token and self.current_token.recognized_string == "[":
+            self.match("SYMBOL", "[")
+            b = self.condition()
+            self.match("SYMBOL", "]")
+            return b
         else:
-            raise SyntaxError("Expected actual parameter starting with 'in' or 'inout'.")
+            left = self.expression()
+            if (self.current_token and self.current_token.family == "OPERATOR" and 
+                self.current_token.recognized_string in ("=", "<=", ">=", ">", "<", "<>")):
+                op = self.current_token.recognized_string
+                self.match("OPERATOR", op)
+            else:
+                raise SyntaxError("Expected relational operator in boolean factor.")
+            right = self.expression()
+            q_true = self.intermediate.genquad(op, left, right, "_")
+            true_list = self.intermediate.makelist(q_true)
+            q_false = self.intermediate.genquad("jump", "_", "_", "_")
+            false_list = self.intermediate.makelist(q_false)
+            return {"true": true_list, "false": false_list}
 
     def condition(self):
         b = self.boolterm()
@@ -536,33 +541,6 @@ class Parser:
             b["false"] = self.intermediate.merge(b["false"], b2["false"])
             b["true"] = b2["true"]
         return b
-
-    def boolfactor(self):
-        if self.current_token and self.current_token.recognized_string == "not":
-            self.match("KEYWORD", "not")
-            self.match("SYMBOL", "[")
-            b = self.condition()
-            self.match("SYMBOL", "]")
-            return {"true": b["false"], "false": b["true"]}
-        elif self.current_token and self.current_token.recognized_string == "[":
-            self.match("SYMBOL", "[")
-            b = self.condition()
-            self.match("SYMBOL", "]")
-            return b
-        else:
-            left = self.expression()
-            if (self.current_token and self.current_token.family == "OPERATOR" and
-                self.current_token.recognized_string in ("=", "<=", ">=", ">", "<", "<>")):
-                op = self.current_token.recognized_string
-                self.match("OPERATOR", op)
-            else:
-                raise SyntaxError("Expected relational operator in boolean factor.")
-            right = self.expression()
-            q_true = self.intermediate.genquad(op, left, right, "_")
-            true_list = self.intermediate.makelist(q_true)
-            q_false = self.intermediate.genquad("jump", "_", "_", "_")
-            false_list = self.intermediate.makelist(q_false)
-            return {"true": true_list, "false": false_list}
 
     def expression(self):
         place = self.term()
@@ -600,8 +578,11 @@ class Parser:
             self.match("IDENTIFIER")
             if self.current_token and self.current_token.recognized_string == "(":
                 self.match("SYMBOL", "(")
-                self.actualparlist()
+                params = self.actualparlist()
                 self.match("SYMBOL", ")")
+                for param in params:
+                    mode = "cv" if param[0] == "in" else "ref"
+                    self.intermediate.genquad("par", param[1], mode, "_")
                 temp = self.new_temp()
                 self.intermediate.genquad("par", temp, "ret", "_")
                 self.intermediate.genquad("call", ident, "_", "_")
@@ -681,7 +662,6 @@ def write_int_file(intermediate, input_path):
 
 ###################################### ASSEMBLY CODE GENERATION #########################################
 def get_offset(symbol_table, name):
-    # Search all scopes for the entity's offset.
     for scope in symbol_table.scopes:
         if name in scope.entities:
             return scope.entities[name].offset
@@ -694,12 +674,9 @@ def write_asm_file(intermediate, symbol_table, input_path):
     output_folder = "asm"
     os.makedirs(output_folder, exist_ok=True)
     output_path = os.path.join(output_folder, output_filename)
-
     asm_lines = []
-    # Prologue: branch to main and save return address.
     asm_lines.append("L0: b Lmain")
     asm_lines.append("L1: sw $ra,-0($sp)")
-
     for quad in intermediate.quads:
         index, op, x, y, z = quad
         if op == "+":
@@ -750,24 +727,21 @@ def write_asm_file(intermediate, symbol_table, input_path):
                 asm_lines.append(f"    lw $t0,-{offset_z}($sp)")
                 asm_lines.append(f"    sw $t1,($t0)")
         elif op == "par":
-            # Parameter passing: mode is in y ("cv", "ref", or "ret")
-            # For simplicity, assume a fixed parameter slot at offset 100 on the stack.
             if y == "cv":
                 offset_x = get_offset(symbol_table, x)
                 asm_lines.append(f"L{index}: lw $t1,-{offset_x}($sp)   // par cv")
-                asm_lines.append("    sw $t1,-100($sp)   // store parameter value")
+                asm_lines.append("    sw $t1,-100($sp)")
             elif y == "ref":
                 offset_x = get_offset(symbol_table, x)
                 asm_lines.append(f"L{index}: la $t1,-{offset_x}($sp)   // par ref")
-                asm_lines.append("    sw $t1,-100($sp)   // store reference")
+                asm_lines.append("    sw $t1,-100($sp)")
             elif y == "ret":
                 offset_x = get_offset(symbol_table, x)
                 asm_lines.append(f"L{index}: lw $t1,-{offset_x}($sp)   // par ret")
-                asm_lines.append("    sw $t1,-104($sp)   // store return value")
+                asm_lines.append("    sw $t1,-104($sp)")
             else:
                 asm_lines.append(f"L{index}: // Unhandled par mode: {y}")
         elif op == "call":
-            # Function call: jump and link to function label.
             asm_lines.append(f"L{index}: jal {x}")
         elif op == "inp":
             offset_x = get_offset(symbol_table, x)
@@ -795,7 +769,6 @@ def write_asm_file(intermediate, symbol_table, input_path):
             asm_lines.append(f"L{index}: j {z}")
         else:
             asm_lines.append(f"L{index}: // Unhandled op: {op} {x} {y} {z}")
-
     with open(output_path, "w", encoding="utf-8") as f:
         for line in asm_lines:
             f.write(line + "\n")
@@ -803,7 +776,7 @@ def write_asm_file(intermediate, symbol_table, input_path):
 
 ###################################### MAIN #########################################
 if __name__ == "__main__":
-    input_path = "tests/ci/factorial.ci"
+    input_path = "tests/ci/fibonacci.ci"
     lexer = LexerFSM(input_path)
     print("Lexical analysis completed successfully.")
     tokens = lexer.tokenize()
