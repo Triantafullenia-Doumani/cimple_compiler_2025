@@ -1,5 +1,6 @@
 ﻿import re
 import os
+import sys
 
 ###################################### SYMBOL TABLE CLASSES #########################################
 class Entity:
@@ -776,7 +777,11 @@ def write_asm_file(intermediate, symbol_table, input_path):
 
 ###################################### MAIN #########################################
 if __name__ == "__main__":
-    input_path = "tests/ci/fibonacci.ci"
+    if len(sys.argv) != 2:
+        print("Usage: python3 cimple_compiler_2025.py <input_file>")
+        sys.exit(1)
+
+    input_path = sys.argv[1]
     lexer = LexerFSM(input_path)
     print("Lexical analysis completed successfully.")
     tokens = lexer.tokenize()
