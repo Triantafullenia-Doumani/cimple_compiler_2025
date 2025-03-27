@@ -1,5 +1,77 @@
 ﻿import re
 import os
+import sys
+
+###################################### SYMBOL TABLE CLASSES #########################################
+class Entity:
+    def __init__(self, name):
+        self.name = name
+
+class Variable(Entity):
+    def __init__(self, name, datatype, offset):
+        super().__init__(name)
+        self.datatype = datatype
+        self.offset = offset
+
+class TemporaryVariable(Variable):
+    def __init__(self, name, datatype="int", offset=0):
+        super().__init__(name, datatype, offset)
+
+class Scope:
+    def __init__(self, parent=None):
+        self.parent = parent
+        self.entities = {}         # Maps names to Entity instances
+        self.offset_counter = 0    # For allocating memory offsets
+
+    def add_entity(self, entity):
+        if entity.name in self.entities:
+            raise ValueError(f"Duplicate declaration: {entity.name}")
+        self.entities[entity.name] = entity
+
+    def find_entity(self, name):
+        if name in self.entities:
+            return self.entities[name]
+        elif self.parent:
+            return self.parent.find_entity(name)
+        return None
+
+class SymbolTable:
+    def __init__(self):
+        self.scopes = []
+
+    def open_scope(self):
+        parent = self.scopes[-1] if self.scopes else None
+        new_scope = Scope(parent)
+        self.scopes.append(new_scope)
+        #print("new scope added")
+
+    def close_scope(self):
+        return self.scopes.pop()
+
+    def current_scope(self):
+        return self.scopes[-1] if self.scopes else None
+
+    def declare(self, entity):
+        self.current_scope().add_entity(entity)
+
+    def lookup(self, name):
+        return self.current_scope().find_entity(name)
+
+    def allocate_offset(self):
+        offset = self.current_scope().offset_counter
+        self.current_scope().offset_counter += 4
+        return offset
+
+    def print_table(self):
+        print("\n=== Symbol Table ===")
+        def print_scope(scope, level=0):
+            indent = "  " * level
+            for name, entity in scope.entities.items():
+                print(f"{indent}{type(entity).__name__}: {vars(entity)}")
+            if scope.parent:
+                print_scope(scope.parent, level + 1)
+        if self.scopes:
+            print_scope(self.current_scope())
 
 ###################################### LEXICAL ANALYSIS #########################################
 class Token:
@@ -12,16 +84,12 @@ class Token:
         return f"Token({self.recognized_string}, {self.family}, line {self.line_number})"
 
 class LexerFSM:
-    # Keywords as given by the grammar and earlier code:
     KEYWORDS = {"program", "declare", "if", "else", "while", "switchcase", "forcase", "incase",
                 "case", "default", "not", "and", "or", "function", "procedure", "call", "return",
                 "in", "inout", "input", "print"}
-    # Operators: note that ":=" is two characters and also relational operators.
     OPERATORS = {"+", "-", "*", "/", "=", "<=", ">=", ">", "<", "<>", ":="}
-    # Symbols include separators and grouping symbols
     SYMBOLS = {";", ",", ":", "(", ")", "{", "}", "[", "]", "."}
     
-    # Lexer states
     START, IDENTIFIER, NUMBER, OPERATOR, COMMENT = range(5)
 
     def __init__(self, file_path):
@@ -36,10 +104,8 @@ class LexerFSM:
         state = self.START
         i = 0
         lexeme = ""
-
         while i < len(text):
             char = text[i]
-
             if state == self.START:
                 if char in " \t\r":
                     i += 1
@@ -63,7 +129,6 @@ class LexerFSM:
                     i += 1
                     continue
                 if any(char == op[0] for op in self.OPERATORS):
-                    state = self.OPERATORS and self.OPERATORS  # just to trigger operator state
                     state = self.OPERATOR
                     lexeme = char
                     i += 1
@@ -74,7 +139,6 @@ class LexerFSM:
                     continue
                 else:
                     raise ValueError(f"Error on line {self.current_line}: Unknown character '{char}'")
-            
             elif state == self.IDENTIFIER:
                 if i < len(text) and text[i].isalnum():
                     lexeme += text[i]
@@ -85,7 +149,6 @@ class LexerFSM:
                     lexeme = ""
                     state = self.START
                 continue
-
             elif state == self.NUMBER:
                 if i < len(text) and text[i].isdigit():
                     lexeme += text[i]
@@ -95,9 +158,7 @@ class LexerFSM:
                     lexeme = ""
                     state = self.START
                 continue
-
             elif state == self.OPERATOR:
-                # Look ahead to try to form a two-character operator.
                 if i < len(text):
                     two_char = lexeme + text[i]
                     if two_char in self.OPERATORS:
@@ -106,7 +167,6 @@ class LexerFSM:
                         state = self.START
                         i += 1
                         continue
-                # If not a two-char operator, output the one-char operator.
                 if lexeme in self.OPERATORS:
                     self.tokens.append(Token(lexeme, "OPERATOR", self.current_line))
                 else:
@@ -114,14 +174,11 @@ class LexerFSM:
                 lexeme = ""
                 state = self.START
                 continue
-
             elif state == self.COMMENT:
                 if char == "#":
                     state = self.START
                 i += 1
                 continue
-
-        # In case a lexeme was being built and the text ended.
         if state == self.IDENTIFIER:
             token_type = "KEYWORD" if lexeme in self.KEYWORDS else "IDENTIFIER"
             self.tokens.append(Token(lexeme, token_type, self.current_line))
@@ -132,7 +189,6 @@ class LexerFSM:
                 self.tokens.append(Token(lexeme, "OPERATOR", self.current_line))
             else:
                 raise ValueError(f"Error on line {self.current_line}: Unknown operator '{lexeme}'")
-
         return self.tokens
 
 ###################################### SYNTAX ANALYSIS #########################################
@@ -142,6 +198,14 @@ class Parser:
         self.current_token_index = 0
         self.current_token = self.tokens[self.current_token_index] if self.tokens else None
         self.intermediate = intermediate  
+        self.symbol_table = SymbolTable()
+        self.symbol_table.open_scope()
+
+    def new_temp(self):
+        temp_name = self.intermediate.newtemp()
+        offset = self.symbol_table.allocate_offset()
+        self.symbol_table.declare(TemporaryVariable(temp_name, "int", offset))
+        return temp_name
 
     def match(self, expected_family, expected_value=None):
         if self.current_token is None:
@@ -156,7 +220,6 @@ class Parser:
             exp = expected_value if expected_value is not None else expected_family
             raise SyntaxError(f"Syntax error at line {self.current_token.line_number}: Expected '{exp}', found '{self.current_token.recognized_string}'.")
 
-    # Grammar production: program : program ID block .
     def program(self):
         self.match("KEYWORD", "program")
         prog_name = self.current_token.recognized_string
@@ -168,35 +231,36 @@ class Parser:
         self.intermediate.genquad("halt", "_", "_", "_")
         self.intermediate.genquad("end_block", prog_name, "_", "_")
         self.match("SYMBOL", ".")
+        self.symbol_table.print_table()
 
-    # block : declarations subprograms statements
     def block(self):
         self.declarations()
         self.subprograms()
         self.statements()
 
-    # declarations : ( declare varlist ; )*
     def declarations(self):
         while self.current_token and self.current_token.recognized_string == "declare":
             self.match("KEYWORD", "declare")
             self.varlist()
             self.match("SYMBOL", ";")
 
-    # varlist : ID ( , ID )* | ε
     def varlist(self):
         if self.current_token and self.current_token.family == "IDENTIFIER":
+            var_name = self.current_token.recognized_string
             self.match("IDENTIFIER")
+            offset = self.symbol_table.allocate_offset()
+            self.symbol_table.declare(Variable(var_name, "int", offset))
             while self.current_token and self.current_token.recognized_string == ",":
                 self.match("SYMBOL", ",")
+                var_name = self.current_token.recognized_string
                 self.match("IDENTIFIER")
+                offset = self.symbol_table.allocate_offset()
+                self.symbol_table.declare(Variable(var_name, "int", offset))
 
-    # subprograms : ( subprogram )*
     def subprograms(self):
         while self.current_token and self.current_token.recognized_string in ("function", "procedure"):
             self.subprogram()
 
-    # subprogram : function ID ( formalparlist ) block
-    #            | procedure ID ( formalparlist ) block
     def subprogram(self):
         if self.current_token.recognized_string == "function":
             self.match("KEYWORD", "function")
@@ -206,8 +270,10 @@ class Parser:
             self.match("SYMBOL", "(")
             self.formalparlist()
             self.match("SYMBOL", ")")
+            self.symbol_table.open_scope()
             self.block()
             self.intermediate.genquad("end_block", func_name, "_", "_")
+            self.symbol_table.close_scope()
         elif self.current_token.recognized_string == "procedure":
             self.match("KEYWORD", "procedure")
             proc_name = self.current_token.recognized_string
@@ -216,12 +282,13 @@ class Parser:
             self.match("SYMBOL", "(")
             self.formalparlist()
             self.match("SYMBOL", ")")
+            self.symbol_table.open_scope()
             self.block()
             self.intermediate.genquad("end_block", proc_name, "_", "_")
+            self.symbol_table.close_scope()
         else:
             raise SyntaxError("Expected 'function' or 'procedure' in subprogram.")
 
-    # formalparlist : formalparitem ( , formalparitem )* | ε
     def formalparlist(self):
         if self.current_token and self.current_token.recognized_string in ("in", "inout"):
             self.formalparitem()
@@ -229,7 +296,6 @@ class Parser:
                 self.match("SYMBOL", ",")
                 self.formalparitem()
 
-    # formalparitem : in ID | inout ID
     def formalparitem(self):
         if self.current_token.recognized_string == "in":
             self.match("KEYWORD", "in")
@@ -240,7 +306,6 @@ class Parser:
         else:
             raise SyntaxError("Expected formal parameter starting with 'in' or 'inout'.")
 
-    # statements : statement ; | { statement ( ; statement )* }
     def statements(self):
         if self.current_token and self.current_token.recognized_string == "{":
             self.match("SYMBOL", "{")
@@ -253,7 +318,6 @@ class Parser:
             self.statement()
             self.match("SYMBOL", ";")
 
-    # statement : one of several alternatives (or ε)
     def statement(self):
         if self.current_token is None:
             return
@@ -280,7 +344,6 @@ class Parser:
         else:
             pass
 
-    # assignStat : ID := expression
     def assignStat(self):
         lhs = self.current_token.recognized_string
         self.match("IDENTIFIER")
@@ -289,7 +352,59 @@ class Parser:
         if result != lhs:
             self.intermediate.genquad(":=", result, "_", lhs)
 
-    # ifStat : if ( condition ) statements elsepart
+    def returnStat(self):
+        self.match("KEYWORD", "return")
+        self.match("SYMBOL", "(")
+        ret_val = self.expression()
+        self.intermediate.genquad("retv", ret_val, "_", "_")
+        self.match("SYMBOL", ")")
+
+    def printStat(self):
+        self.match("KEYWORD", "print")
+        self.match("SYMBOL", "(")
+        print_value = self.expression()
+        self.intermediate.genquad("out", print_value, "_", "_")
+        self.match("SYMBOL", ")")
+
+    def inputStat(self):
+        self.match("KEYWORD", "input")
+        self.match("SYMBOL", "(")
+        input_var = self.current_token.recognized_string
+        self.match("IDENTIFIER")
+        self.intermediate.genquad("inp", input_var, "_", "_")
+        self.match("SYMBOL", ")")
+
+    def callStat(self):
+        self.match("KEYWORD", "call")
+        func_name = self.current_token.recognized_string
+        self.match("IDENTIFIER")
+        self.match("SYMBOL", "(")
+        self.actualparlist()  # Actual parameters are generated by factor() for function calls.
+        self.match("SYMBOL", ")")
+        self.intermediate.genquad("call", func_name, "_", "_")
+
+    def actualparitem(self):
+        if self.current_token.recognized_string == "in":
+            self.match("KEYWORD", "in")
+            value = self.expression()
+            return ("in", value)
+        elif self.current_token.recognized_string == "inout":
+            self.match("KEYWORD", "inout")
+            identifier = self.current_token.recognized_string
+            self.match("IDENTIFIER")
+            return ("inout", identifier)
+        else:
+            raise SyntaxError("Expected actual parameter starting with 'in' or 'inout'.")
+
+    def actualparlist(self):
+        params = []
+        if self.current_token and self.current_token.recognized_string != ")":
+            params.append(self.actualparitem())
+            while self.current_token and self.current_token.recognized_string == ",":
+                self.match("SYMBOL", ",")
+                params.append(self.actualparitem())
+        return params
+
     def ifStat(self):
         self.match("KEYWORD", "if")
         self.match("SYMBOL", "(")
@@ -304,7 +419,6 @@ class Parser:
             self.statements()
         self.intermediate.backpatch([jump_after_then], self.intermediate.nextquad())
 
-    # whileStat : while ( condition ) statements
     def whileStat(self):
         M = self.intermediate.nextquad()
         self.match("KEYWORD", "while")
@@ -318,203 +432,68 @@ class Parser:
         F = self.intermediate.nextquad()
         self.intermediate.backpatch(b["false"], F)
 
-    # switchcaseStat : switchcase ( case ( condition ) statements )* default statements )
     def switchcaseStat(self):
         self.match("KEYWORD", "switchcase")
-    
-        exit_list = []  # {p0} Initialize exitList as an empty list
-
-        # Case handling
+        exit_list = []
         while self.current_token and self.current_token.recognized_string == "case":
             self.match("KEYWORD", "case")
-        
             if self.current_token.recognized_string == "(":
                 self.match("SYMBOL", "(")
-                condition = self.condition()
+                cond = self.condition()
                 self.match("SYMBOL", ")")
             else:
-                condition = self.condition()
-
-            self.intermediate.backpatch(condition["true"], self.intermediate.nextquad())  # {p1}
-            self.statements()  # statements(1) {p2}
-        
-            t = self.intermediate.makelist(self.intermediate.genquad("jump", "_", "_", "_"))  # Jump after case body
-            exit_list = self.intermediate.merge(exit_list, t)  # Merge with existing exitList
-            self.intermediate.backpatch(condition["false"], self.intermediate.nextquad())  # Backpatch false condition
-
-        # Default case
+                cond = self.condition()
+            self.intermediate.backpatch(cond["true"], self.intermediate.nextquad())
+            self.statements()
+            t = self.intermediate.makelist(self.intermediate.genquad("jump", "_", "_", "_"))
+            exit_list = self.intermediate.merge(exit_list, t)
+            self.intermediate.backpatch(cond["false"], self.intermediate.nextquad())
         self.match("KEYWORD", "default")
-        self.statements()  # statements(2) {p3}
-    
-        self.intermediate.backpatch(exit_list, self.intermediate.nextquad())  # {p3} Backpatch exitList to end
+        self.statements()
+        self.intermediate.backpatch(exit_list, self.intermediate.nextquad())
 
-
-    # forcaseStat : forcase {p1}
-    # ( case ( condition ) {p2} statements {p3} )*
-    # default statements
     def forcaseStat(self):
         self.match("KEYWORD", "forcase")
-        # {p1} Marker: record the starting quad for all case conditions.
         firstCondQuad = self.intermediate.nextquad()
-        exit_jumps = []   # Will hold jump quads from each case's statements.
-        prev_false_list = None  # To hold the false list from the previous case.
-        
-        # Process one or more case clauses.
+        exit_jumps = []
+        prev_false_list = None
         while self.current_token and self.current_token.recognized_string == "case":
-            # Record the starting quad for this case's condition evaluation.
             current_cond_quad = self.intermediate.nextquad()
             self.match("KEYWORD", "case")
             self.match("SYMBOL", "(")
-            cond = self.condition()  # cond is a dict with "true" and "false" lists.
+            cond = self.condition()
             self.match("SYMBOL", ")")
-            # If a previous case exists, backpatch its false list to this case's condition.
             if prev_false_list is not None:
                 self.intermediate.backpatch(prev_false_list, current_cond_quad)
-            # {p2} Backpatch the true list to the beginning of this case's statements.
             self.intermediate.backpatch(cond["true"], self.intermediate.nextquad())
             self.statements()
-            # {p3} Generate a jump that returns to the beginning of the forcase.
             exit_jumps.append(self.intermediate.genquad("jump", "_", "_", firstCondQuad))
-            # Save the false list of the current condition to be backpatched by the next case or default.
             prev_false_list = cond["false"]
-        
-        # Process the default clause.
         self.match("KEYWORD", "default")
-        # Backpatch the false list from the last case to the start of the default statements.
         self.intermediate.backpatch(prev_false_list, self.intermediate.nextquad())
         self.statements()
-        # Note: The exit jumps already target firstCondQuad so no further backpatching is needed.
-
-    # incaseStat : incase ( case ( condition ) statements )* )
-
 
     def incaseStat(self):
-        """ Parses the 'incase' statement and generates intermediate code. """
         self.match("KEYWORD", "incase")
-        
-        # {p1}: Initialize flag and first condition quad
-        flag = self.intermediate.newtemp()
+        flag = self.new_temp()
         firstCondQuad = self.intermediate.nextquad()
-        self.intermediate.genquad(':=', 0, '_', flag)
-        
+        self.intermediate.genquad(":=", 0, "_", flag)
         while self.current_token and self.current_token.recognized_string == "case":
             self.match("KEYWORD", "case")
             if self.current_token.recognized_string == "(":
                 self.match("SYMBOL", "(")
-            
-            cond = self.condition()  # Evaluate condition
-            
-            if self.current_token.recognized_string == ")":
+                cond = self.condition()
                 self.match("SYMBOL", ")")
-            
-            # {p2}: If condition is true, execute statements
+            else:
+                cond = self.condition()
             self.intermediate.backpatch(cond["true"], self.intermediate.nextquad())
             self.statements()
-            
-            # {p3}: Set flag to true
-            self.intermediate.genquad(':=', 1, '_', flag)
-            
-            # {p3}: Backpatch condition.false to next case/default
+            self.intermediate.genquad(":=", 1, "_", flag)
             self.intermediate.backpatch(cond["false"], self.intermediate.nextquad())
-        
-        # Process default case
         self.match("KEYWORD", "default")
-        
-        # {p4}: If flag is 1, jump back to first condition, else continue to default
-        self.intermediate.genquad('=', 1, flag, firstCondQuad)
+        self.intermediate.genquad("=", 1, flag, firstCondQuad)
         self.statements()
 
-
-
-    # returnStat : return( expression )
-    def returnStat(self):
-        self.match("KEYWORD", "return")
-        self.match("SYMBOL", "(")
-        return_value = self.expression()
-        self.intermediate.genquad("retv", return_value, "_", "_")
-        self.match("SYMBOL", ")")
-
-    # callStat : call ID( actualparlist )
-    def callStat(self):
-        self.match("KEYWORD", "call")
-        proc_name = self.current_token.recognized_string
-        self.match("IDENTIFIER")
-        self.match("SYMBOL", "(")
-        params = self.actualparlist()  # Returns a list of (mode, value)
-        self.match("SYMBOL", ")")
-        for param in params:
-            mode = "cv" if param[0] == "in" else "ref"
-            self.intermediate.genquad("par", param[1], mode, "_")
-        self.intermediate.genquad("call", proc_name, "_", "_")
-
-    # printStat : print( expression )
-    def printStat(self):
-        self.match("KEYWORD", "print")
-        self.match("SYMBOL", "(")
-        print_value = self.expression()
-        self.intermediate.genquad("out", print_value, "_", "_")
-        self.match("SYMBOL", ")")
-
-    # inputStat : input( ID )
-    def inputStat(self):
-        self.match("KEYWORD", "input")
-        self.match("SYMBOL", "(")
-        input_var = self.current_token.recognized_string
-        self.match("IDENTIFIER")
-        self.intermediate.genquad("inp", input_var, "_", "_")
-        self.match("SYMBOL", ")")
-
-    # actualparlist : actualparitem ( , actualparitem )* | ε
-    def actualparlist(self):
-        params = []
-        if self.current_token and self.current_token.recognized_string != ")":
-            params.append(self.actualparitem())
-            while self.current_token and self.current_token.recognized_string == ",":
-                self.match("SYMBOL", ",")
-                params.append(self.actualparitem())
-        return params
-
-    # actualparitem : in expression | inout ID
-    def actualparitem(self):
-        if self.current_token.recognized_string == "in":
-            self.match("KEYWORD", "in")
-            value = self.expression()
-            return ("in", value)
-        elif self.current_token.recognized_string == "inout":
-            self.match("KEYWORD", "inout")
-            identifier = self.current_token.recognized_string
-            self.match("IDENTIFIER")
-            return ("inout", identifier)
-        else:
-            raise SyntaxError("Expected actual parameter starting with 'in' or 'inout'.")
-
-    # condition : boolterm ( or boolterm )*
-    def condition(self):
-        b = self.boolterm()
-        while self.current_token and self.current_token.recognized_string == "or":
-            self.match("KEYWORD", "or")
-            marker = self.intermediate.nextquad()
-            self.intermediate.backpatch(b["false"], marker)  # Backpatch previous false list before checking the next condition
-            b2 = self.boolterm()
-            b["true"] = self.intermediate.merge(b["true"], b2["true"])  # Merge all true lists
-            b["false"] = b2["false"]  # The false list should be the last evaluated boolterm's false list
-        return b
-
-
-    # boolterm : boolfactor ( and boolfactor )*
-    def boolterm(self):
-        b = self.boolfactor()
-        while self.current_token and self.current_token.recognized_string == "and":
-            self.match("KEYWORD", "and")
-            marker = self.intermediate.nextquad()
-            self.intermediate.backpatch(b["true"], marker)  # Ensure previous 'true' statements flow correctly
-            b2 = self.boolfactor()
-            b["false"] = self.intermediate.merge(b["false"], b2["false"])  # Merge false lists
-            b["true"] = b2["true"]  # Set true list to the last factor's true list
-        return b
-
-
-    # boolfactor : not [ condition ] | [ condition ] | expression REL_OP expression
     def boolfactor(self):
         if self.current_token and self.current_token.recognized_string == "not":
             self.match("KEYWORD", "not")
@@ -529,7 +508,7 @@ class Parser:
             return b
         else:
             left = self.expression()
-            if (self.current_token and self.current_token.family == "OPERATOR" and
+            if (self.current_token and self.current_token.family == "OPERATOR" and 
                 self.current_token.recognized_string in ("=", "<=", ">=", ">", "<", "<>")):
                 op = self.current_token.recognized_string
                 self.match("OPERATOR", op)
@@ -542,6 +521,28 @@ class Parser:
             false_list = self.intermediate.makelist(q_false)
             return {"true": true_list, "false": false_list}
 
+    def condition(self):
+        b = self.boolterm()
+        while self.current_token and self.current_token.recognized_string == "or":
+            self.match("KEYWORD", "or")
+            marker = self.intermediate.nextquad()
+            self.intermediate.backpatch(b["false"], marker)
+            b2 = self.boolterm()
+            b["true"] = self.intermediate.merge(b["true"], b2["true"])
+            b["false"] = b2["false"]
+        return b
+
+    def boolterm(self):
+        b = self.boolfactor()
+        while self.current_token and self.current_token.recognized_string == "and":
+            self.match("KEYWORD", "and")
+            marker = self.intermediate.nextquad()
+            self.intermediate.backpatch(b["true"], marker)
+            b2 = self.boolfactor()
+            b["false"] = self.intermediate.merge(b["false"], b2["false"])
+            b["true"] = b2["true"]
+        return b
+
     def expression(self):
         place = self.term()
         while (self.current_token and 
@@ -550,7 +551,7 @@ class Parser:
             op = self.current_token.recognized_string
             self.match("OPERATOR", op)
             right = self.term()
-            temp = self.intermediate.newtemp()
+            temp = self.new_temp()
             self.intermediate.genquad(op, place, right, temp)
             place = temp
         return place
@@ -563,30 +564,27 @@ class Parser:
             op = self.current_token.recognized_string
             self.match("OPERATOR", op)
             right = self.factor()
-            temp = self.intermediate.newtemp()
+            temp = self.new_temp()
             self.intermediate.genquad(op, place, right, temp)
             place = temp
         return place
 
     def factor(self):
-        # Handle an optional unary sign
         unary = None
         if self.current_token and self.current_token.family == "OPERATOR" and self.current_token.recognized_string in ("+", "-"):
             unary = self.current_token.recognized_string
             self.match("OPERATOR", unary)
-
         if self.current_token.family == "IDENTIFIER":
             ident = self.current_token.recognized_string
             self.match("IDENTIFIER")
-            # Check for a function call (identifier followed by "(")
             if self.current_token and self.current_token.recognized_string == "(":
                 self.match("SYMBOL", "(")
-                params = self.actualparlist()  # Collect list of (mode, value)
+                params = self.actualparlist()
                 self.match("SYMBOL", ")")
                 for param in params:
                     mode = "cv" if param[0] == "in" else "ref"
                     self.intermediate.genquad("par", param[1], mode, "_")
-                temp = self.intermediate.newtemp()
+                temp = self.new_temp()
                 self.intermediate.genquad("par", temp, "ret", "_")
                 self.intermediate.genquad("call", ident, "_", "_")
                 result = temp
@@ -602,12 +600,10 @@ class Parser:
             self.match("SYMBOL", ")")
         else:
             raise SyntaxError("Unexpected token in factor")
-        
         if unary == "-":
-            temp = self.intermediate.newtemp()
+            temp = self.new_temp()
             self.intermediate.genquad("*", result, "-1", temp)
             result = temp
-        
         return result
 
     def optionalSign(self):
@@ -620,7 +616,7 @@ class IntermediateCodeGenerator:
     def __init__(self):
         self.quads = []
         self.temp_count = 0
-        self.next_quad_index = 1  # Start numbering quads from 1
+        self.next_quad_index = 1  # Quads numbered from 1
 
     def nextquad(self):
         return self.next_quad_index
@@ -665,8 +661,127 @@ def write_int_file(intermediate, input_path):
             f.write(f"{quad[0]}: {quad[1]}, {quad[2]}, {quad[3]}, {quad[4]}\n")
     print(f"Intermediate code written to {output_path}")
 
+###################################### ASSEMBLY CODE GENERATION #########################################
+def get_offset(symbol_table, name):
+    for scope in symbol_table.scopes:
+        if name in scope.entities:
+            return scope.entities[name].offset
+    return 0
+
+def write_asm_file(intermediate, symbol_table, input_path):
+    base_name = os.path.basename(input_path)
+    name_without_ext = os.path.splitext(base_name)[0]
+    output_filename = f"{name_without_ext}.asm"
+    output_folder = "asm"
+    os.makedirs(output_folder, exist_ok=True)
+    output_path = os.path.join(output_folder, output_filename)
+    asm_lines = []
+    asm_lines.append("L0: b Lmain")
+    asm_lines.append("L1: sw $ra,-0($sp)")
+    for quad in intermediate.quads:
+        index, op, x, y, z = quad
+        if op == "+":
+            offset_x = get_offset(symbol_table, x)
+            offset_z = get_offset(symbol_table, z)
+            asm_lines.append(f"L{index}: lw $t1,-{offset_x}($sp)")
+            asm_lines.append(f"    li $t2,{y}")
+            asm_lines.append(f"    add $t1,$t1,$t2")
+            asm_lines.append(f"    sw $t1,-{offset_z}($sp)")
+        elif op == "-":
+            offset_x = get_offset(symbol_table, x)
+            offset_z = get_offset(symbol_table, z)
+            asm_lines.append(f"L{index}: lw $t1,-{offset_x}($sp)")
+            asm_lines.append(f"    li $t2,{y}")
+            asm_lines.append(f"    sub $t1,$t1,$t2")
+            asm_lines.append(f"    sw $t1,-{offset_z}($sp)")
+        elif op == "*":
+            offset_x = get_offset(symbol_table, x)
+            offset_y = get_offset(symbol_table, y) if not y.isdigit() else None
+            offset_z = get_offset(symbol_table, z)
+            asm_lines.append(f"L{index}: lw $t1,-{offset_x}($sp)")
+            if y.isdigit():
+                asm_lines.append(f"    li $t2,{y}")
+            else:
+                asm_lines.append(f"    lw $t2,-{offset_y}($sp)")
+            asm_lines.append(f"    mul $t1,$t1,$t2")
+            asm_lines.append(f"    sw $t1,-{offset_z}($sp)")
+        elif op == "/":
+            offset_x = get_offset(symbol_table, x)
+            offset_y = get_offset(symbol_table, y) if not y.isdigit() else None
+            offset_z = get_offset(symbol_table, z)
+            asm_lines.append(f"L{index}: lw $t1,-{offset_x}($sp)")
+            if y.isdigit():
+                asm_lines.append(f"    li $t2,{y}")
+            else:
+                asm_lines.append(f"    lw $t2,-{offset_y}($sp)")
+            asm_lines.append("    div $t1,$t2")
+            asm_lines.append("    mflo $t1")
+            asm_lines.append(f"    sw $t1,-{offset_z}($sp)")
+        elif op == ":=":
+            offset_z = get_offset(symbol_table, z)
+            if x.isdigit() or (x.startswith("-") and x[1:].isdigit()):
+                asm_lines.append(f"L{index}: li $t1,{x}")
+                asm_lines.append(f"    sw $t1,-{offset_z}($sp)")
+            else:
+                offset_x = get_offset(symbol_table, x)
+                asm_lines.append(f"L{index}: lw $t1,-{offset_x}($sp)")
+                asm_lines.append(f"    lw $t0,-{offset_z}($sp)")
+                asm_lines.append(f"    sw $t1,($t0)")
+        elif op == "par":
+            if y == "cv":
+                offset_x = get_offset(symbol_table, x)
+                asm_lines.append(f"L{index}: lw $t1,-{offset_x}($sp)   // par cv")
+                asm_lines.append("    sw $t1,-100($sp)")
+            elif y == "ref":
+                offset_x = get_offset(symbol_table, x)
+                asm_lines.append(f"L{index}: la $t1,-{offset_x}($sp)   // par ref")
+                asm_lines.append("    sw $t1,-100($sp)")
+            elif y == "ret":
+                offset_x = get_offset(symbol_table, x)
+                asm_lines.append(f"L{index}: lw $t1,-{offset_x}($sp)   // par ret")
+                asm_lines.append("    sw $t1,-104($sp)")
+            else:
+                asm_lines.append(f"L{index}: // Unhandled par mode: {y}")
+        elif op == "call":
+            asm_lines.append(f"L{index}: jal {x}")
+        elif op == "inp":
+            offset_x = get_offset(symbol_table, x)
+            asm_lines.append(f"L{index}: jal read_int")
+            asm_lines.append(f"    sw $v0,-{offset_x}($sp)")
+        elif op == "out":
+            offset_x = get_offset(symbol_table, x)
+            asm_lines.append(f"L{index}: lw $t1,-{offset_x}($sp)")
+            asm_lines.append("    move $a0,$t1")
+            asm_lines.append("    jal print_int")
+        elif op == "retv":
+            offset_x = get_offset(symbol_table, x)
+            asm_lines.append(f"L{index}: lw $t0,-{offset_x}($sp)")
+            asm_lines.append("    lw $t1,($t0)")
+            asm_lines.append("    lw $t0,-8($sp)")
+            asm_lines.append("    sw $t1,($t0)")
+        elif op == "begin_block":
+            asm_lines.append(f"L{index}: // begin_block for {x}")
+        elif op == "end_block":
+            asm_lines.append(f"L{index}: lw $ra,-0($sp)")
+            asm_lines.append("    jr $ra")
+        elif op == "halt":
+            asm_lines.append(f"L{index}: // halt")
+        elif op == "jump":
+            asm_lines.append(f"L{index}: j {z}")
+        else:
+            asm_lines.append(f"L{index}: // Unhandled op: {op} {x} {y} {z}")
+    with open(output_path, "w", encoding="utf-8") as f:
+        for line in asm_lines:
+            f.write(line + "\n")
+    print(f"Assembly code written to {output_path}")
+
+###################################### MAIN #########################################
 if __name__ == "__main__":
-    input_path = "tests/ci/testWhile_or.ci"
+    if len(sys.argv) != 2:
+        print("Usage: python3 cimple_compiler_2025.py <input_file>")
+        sys.exit(1)
+
+    input_path = sys.argv[1]
     lexer = LexerFSM(input_path)
     print("Lexical analysis completed successfully.")
     tokens = lexer.tokenize()
@@ -677,3 +792,4 @@ if __name__ == "__main__":
     print("\nGenerated Intermediate Code (Quads):")
     intermediate.print_quads()
     write_int_file(intermediate, input_path)
+    write_asm_file(intermediate, parser.symbol_table, input_path)
