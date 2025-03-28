@@ -667,8 +667,23 @@ def get_offset(symbol_table, name):
         if name in scope.entities:
             return scope.entities[name].offset
     return 0
-
 def write_asm_file(intermediate, symbol_table, input_path):
+    def get_offset_local(symbol_table, name):
+        for scope in symbol_table.scopes:
+            if name in scope.entities:
+                return scope.entities[name].offset
+        return 0
+
+    def is_number(value):
+        return value.isdigit() or (value.startswith('-') and value[1:].isdigit())
+
+    def load_operand(reg, operand, label=""):
+        if is_number(operand):
+            return [f"{label} li {reg}, {operand}"]
+        else:
+            offset = get_offset_local(symbol_table, operand)
+            return [f"{label} lw {reg}, -{offset}(sp)"]
+
     base_name = os.path.basename(input_path)
     name_without_ext = os.path.splitext(base_name)[0]
     output_filename = f"{name_without_ext}.asm"
@@ -676,104 +691,130 @@ def write_asm_file(intermediate, symbol_table, input_path):
     os.makedirs(output_folder, exist_ok=True)
     output_path = os.path.join(output_folder, output_filename)
     asm_lines = []
-    asm_lines.append("L0: b Lmain")
-    asm_lines.append("L1: sw $ra,-0($sp)")
+
+    asm_lines.append("    la sp, _stack")
+    asm_lines.append("    addi sp, sp, 1024")
+    asm_lines.append("    j Lmain")
+    main_label_emitted = False
+
     for quad in intermediate.quads:
         index, op, x, y, z = quad
-        if op == "+":
-            offset_x = get_offset(symbol_table, x)
-            offset_z = get_offset(symbol_table, z)
-            asm_lines.append(f"L{index}: lw $t1,-{offset_x}($sp)")
-            asm_lines.append(f"    li $t2,{y}")
-            asm_lines.append(f"    add $t1,$t1,$t2")
-            asm_lines.append(f"    sw $t1,-{offset_z}($sp)")
-        elif op == "-":
-            offset_x = get_offset(symbol_table, x)
-            offset_z = get_offset(symbol_table, z)
-            asm_lines.append(f"L{index}: lw $t1,-{offset_x}($sp)")
-            asm_lines.append(f"    li $t2,{y}")
-            asm_lines.append(f"    sub $t1,$t1,$t2")
-            asm_lines.append(f"    sw $t1,-{offset_z}($sp)")
-        elif op == "*":
-            offset_x = get_offset(symbol_table, x)
-            offset_y = get_offset(symbol_table, y) if not y.isdigit() else None
-            offset_z = get_offset(symbol_table, z)
-            asm_lines.append(f"L{index}: lw $t1,-{offset_x}($sp)")
-            if y.isdigit():
-                asm_lines.append(f"    li $t2,{y}")
+        label = f"L{index}:"
+
+        if op == "begin_block":
+            if not main_label_emitted and (x == "main" or x == name_without_ext):
+                asm_lines.append(f"Lmain: # begin_block {x}")
+                main_label_emitted = True
             else:
-                asm_lines.append(f"    lw $t2,-{offset_y}($sp)")
-            asm_lines.append(f"    mul $t1,$t1,$t2")
-            asm_lines.append(f"    sw $t1,-{offset_z}($sp)")
-        elif op == "/":
-            offset_x = get_offset(symbol_table, x)
-            offset_y = get_offset(symbol_table, y) if not y.isdigit() else None
-            offset_z = get_offset(symbol_table, z)
-            asm_lines.append(f"L{index}: lw $t1,-{offset_x}($sp)")
-            if y.isdigit():
-                asm_lines.append(f"    li $t2,{y}")
-            else:
-                asm_lines.append(f"    lw $t2,-{offset_y}($sp)")
-            asm_lines.append("    div $t1,$t2")
-            asm_lines.append("    mflo $t1")
-            asm_lines.append(f"    sw $t1,-{offset_z}($sp)")
+                asm_lines.append(f"{x}: # begin_block {x}")
+            continue
+
+        if op in {"+", "-", "*", "/"}:
+            oz = get_offset_local(symbol_table, z)
+            asm_lines += load_operand("t0", x, label)
+            asm_lines += load_operand("t1", y)
+            op_map = {
+                "+": "add",
+                "-": "sub",
+                "*": "mul",
+                "/": "div"
+            }
+            asm_lines.append(f"    {op_map[op]} t2, t0, t1")
+            asm_lines.append(f"    sw t2, -{oz}(sp)")
+
         elif op == ":=":
-            offset_z = get_offset(symbol_table, z)
-            if x.isdigit() or (x.startswith("-") and x[1:].isdigit()):
-                asm_lines.append(f"L{index}: li $t1,{x}")
-                asm_lines.append(f"    sw $t1,-{offset_z}($sp)")
+            oz = get_offset_local(symbol_table, z)
+            if is_number(x):
+                asm_lines.append(f"{label} li t0, {x}")
             else:
-                offset_x = get_offset(symbol_table, x)
-                asm_lines.append(f"L{index}: lw $t1,-{offset_x}($sp)")
-                asm_lines.append(f"    lw $t0,-{offset_z}($sp)")
-                asm_lines.append(f"    sw $t1,($t0)")
-        elif op == "par":
-            if y == "cv":
-                offset_x = get_offset(symbol_table, x)
-                asm_lines.append(f"L{index}: lw $t1,-{offset_x}($sp)   // par cv")
-                asm_lines.append("    sw $t1,-100($sp)")
-            elif y == "ref":
-                offset_x = get_offset(symbol_table, x)
-                asm_lines.append(f"L{index}: la $t1,-{offset_x}($sp)   // par ref")
-                asm_lines.append("    sw $t1,-100($sp)")
-            elif y == "ret":
-                offset_x = get_offset(symbol_table, x)
-                asm_lines.append(f"L{index}: lw $t1,-{offset_x}($sp)   // par ret")
-                asm_lines.append("    sw $t1,-104($sp)")
-            else:
-                asm_lines.append(f"L{index}: // Unhandled par mode: {y}")
-        elif op == "call":
-            asm_lines.append(f"L{index}: jal {x}")
-        elif op == "inp":
-            offset_x = get_offset(symbol_table, x)
-            asm_lines.append(f"L{index}: jal read_int")
-            asm_lines.append(f"    sw $v0,-{offset_x}($sp)")
-        elif op == "out":
-            offset_x = get_offset(symbol_table, x)
-            asm_lines.append(f"L{index}: lw $t1,-{offset_x}($sp)")
-            asm_lines.append("    move $a0,$t1")
-            asm_lines.append("    jal print_int")
-        elif op == "retv":
-            offset_x = get_offset(symbol_table, x)
-            asm_lines.append(f"L{index}: lw $t0,-{offset_x}($sp)")
-            asm_lines.append("    lw $t1,($t0)")
-            asm_lines.append("    lw $t0,-8($sp)")
-            asm_lines.append("    sw $t1,($t0)")
-        elif op == "begin_block":
-            asm_lines.append(f"L{index}: // begin_block for {x}")
-        elif op == "end_block":
-            asm_lines.append(f"L{index}: lw $ra,-0($sp)")
-            asm_lines.append("    jr $ra")
-        elif op == "halt":
-            asm_lines.append(f"L{index}: // halt")
+                ox = get_offset_local(symbol_table, x)
+                asm_lines.append(f"{label} lw t0, -{ox}(sp)")
+            asm_lines.append(f"    sw t0, -{oz}(sp)")
+
+        elif op in ["=", "<>", "<", "<=", ">", ">="]:
+            asm_lines += load_operand("t0", x, label)
+            asm_lines += load_operand("t1", y)
+            branch = {
+                "=": f"beq t0, t1, L{z}",
+                "<>": f"bne t0, t1, L{z}",
+                "<": f"blt t0, t1, L{z}",
+                "<=": f"ble t0, t1, L{z}",
+                ">": f"bgt t0, t1, L{z}",
+                ">=": f"bge t0, t1, L{z}",
+            }
+            asm_lines.append(f"    {branch[op]}")
+
         elif op == "jump":
-            asm_lines.append(f"L{index}: j {z}")
+            asm_lines.append(f"{label} j L{z}")
+
+        elif op == "par":
+            ox = get_offset_local(symbol_table, x)
+            if y == "cv":
+                asm_lines.append(f"{label} lw t0, -{ox}(sp)  # par cv")
+                asm_lines.append("    sw t0, -100(sp)")
+            elif y == "ref":
+                asm_lines.append(f"{label} addi t0, sp, -{ox}  # par ref")
+                asm_lines.append("    sw t0, -100(sp)")
+            elif y == "ret":
+                asm_lines.append(f"{label} addi t0, sp, -{ox}  # par ret")
+                asm_lines.append("    sw t0, -104(sp)")
+
+        elif op == "call":
+            asm_lines.append(f"{label} jal {x}")
+
+        elif op == "inp":
+            ox = get_offset_local(symbol_table, x)
+            asm_lines.append(f"{label} call read_int")
+            asm_lines.append(f"    sw a0, -{ox}(sp)")
+
+        elif op == "out":
+            ox = get_offset_local(symbol_table, x)
+            asm_lines.append(f"{label} lw a0, -{ox}(sp)")
+            asm_lines.append("    call print_int")
+
+        elif op == "retv":
+            ox = get_offset_local(symbol_table, x)
+            asm_lines.append(f"{label} lw t0, -{ox}(sp)")
+            asm_lines.append("    lw t1, -8(sp)")
+            asm_lines.append("    sw t0, 0(t1)")
+
+        elif op == "end_block":
+            asm_lines.append(f"{label} ret")
+
+        elif op == "halt":
+            asm_lines.append(f"{label} # halt")
+
         else:
-            asm_lines.append(f"L{index}: // Unhandled op: {op} {x} {y} {z}")
+            asm_lines.append(f"# {label} Unhandled op: {op} {x} {y} {z}")
+
+    asm_lines.append("")
+    asm_lines.append(".data")
+    asm_lines.append("_stack: .space 1024")
+    asm_lines.append("str_nl: .asciz \"\\n\"")
+    asm_lines.append(".text")
+    asm_lines.append("")
+    asm_lines.append("# Runtime routines")
+    asm_lines.append("read_int:")
+    asm_lines.append("    li a7, 5")
+    asm_lines.append("    ecall")
+    asm_lines.append("    ret")
+    asm_lines.append("")
+    asm_lines.append("print_int:")
+    asm_lines.append("    li a7, 1")
+    asm_lines.append("    ecall")
+    asm_lines.append("    ret")
+
     with open(output_path, "w", encoding="utf-8") as f:
         for line in asm_lines:
             f.write(line + "\n")
-    print(f"Assembly code written to {output_path}")
+
+    print(f"RISC-V Assembly code written to {output_path}")
+
+
+
+
+
+
 
 ###################################### MAIN #########################################
 if __name__ == "__main__":
