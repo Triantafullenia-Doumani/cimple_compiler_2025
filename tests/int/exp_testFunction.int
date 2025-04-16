@@ -5,6 +5,6 @@
 5: :=, 5, _, x
 6: end_block, functionName, _, _
 7: begin_block, mainBlock, _, _
-8: inp, x, _, _
+8: in, x, _, _
 9: halt, _, _, _
 10: end_block, mainBlock, _, _

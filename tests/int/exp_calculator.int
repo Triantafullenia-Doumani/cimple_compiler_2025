@@ -15,9 +15,9 @@
 15: retv, T_4, _, _
 16: end_block, divide, _, _
 17: begin_block, calculator, _, _
-18: inp, choice, _, _
-19: inp, x, _, _
-20: inp, y, _, _
+18: in, choice, _, _
+19: in, x, _, _
+20: in, y, _, _
 21: =, choice, 1, 23
 22: jump, _, _, 34
 23: par, x, cv, _

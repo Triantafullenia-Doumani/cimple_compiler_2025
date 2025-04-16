@@ -1,5 +1,5 @@
 1: begin_block, countDigits, _, _
-2: inp, x, _, _
+2: in, x, _, _
 3: :=, 0, _, count
 4: >, x, 0, 6
 5: jump, _, _, 11

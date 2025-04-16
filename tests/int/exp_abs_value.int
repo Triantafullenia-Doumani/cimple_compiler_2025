@@ -9,7 +9,7 @@
 9: jump, _, _, 2
 10: end_block, absvalue, _, _
 11: begin_block, absolutevalue, _, _
-12: inp, x, _, _
+12: in, x, _, _
 13: par, x, cv, _
 14: par, T_2, ret, _
 15: call, absvalue, _, _

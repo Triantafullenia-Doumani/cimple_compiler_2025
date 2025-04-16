@@ -371,7 +371,7 @@ class Parser:
         self.match("SYMBOL", "(")
         input_var = self.current_token.recognized_string
         self.match("IDENTIFIER")
-        self.intermediate.genquad("inp", input_var, "_", "_")
+        self.intermediate.genquad("in", input_var, "_", "_")
         self.match("SYMBOL", ")")
 
     def callStat(self):

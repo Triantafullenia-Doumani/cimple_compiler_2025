@@ -11,7 +11,7 @@
 11: retv, T_5, _, _
 12: end_block, fibonacci, _, _
 13: begin_block, fibonacci, _, _
-14: inp, x, _, _
+14: in, x, _, _
 15: par, x, cv, _
 16: par, T_6, ret, _
 17: call, fibonacci, _, _

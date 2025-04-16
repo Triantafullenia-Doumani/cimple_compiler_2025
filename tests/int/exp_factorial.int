@@ -1,5 +1,5 @@
 1: begin_block, factorial, _, _
-2: inp, x, _, _
+2: in, x, _, _
 3: :=, 1, _, fact
 4: :=, 1, _, i
 5: <=, i, x, 7
